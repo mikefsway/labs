@@ -51,9 +51,21 @@ python scraper/batch_download.py
 python -c "import sys; sys.path.insert(0,'scraper'); from parse_schedule import parse_schedule; import json; print(json.dumps(parse_schedule('path/to/file.pdf'), indent=2))"
 ```
 
+## Embedding & Search Pipeline
+
+- `scraper/generate_embeddings.py` — Batch-embeds capabilities.search_text via OpenAI text-embedding-3-small (512 dims)
+  - Resumable: only processes rows where embedding IS NULL
+  - Reads credentials from `.env` (OPENAI_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_KEY)
+  - All 14,298 capabilities embedded as of 2026-04-07
+- `scraper/search.py` — Semantic search CLI: embeds a query and calls `match_capabilities` RPC
+  - Usage: `python scraper/search.py "tensile testing of steel"`
+- `match_capabilities(query_embedding, match_count)` — Supabase SQL function for cosine similarity search
+  - Joins capabilities → labs, returns lab_name, materials, test_type, standards, similarity score
+- **Known limitation**: short queries (e.g. "asbestos air sampling") match generic concepts ("air sampling") over specific labs. Hybrid search (keyword boost + vector) would fix this.
+
 ## Next Steps
 
-- Generate embeddings for capabilities.search_text (OpenAI text-embedding-3-small, 512 dims)
+- Hybrid search: combine keyword filtering/boosting with vector similarity (RRF or keyword pre-filter)
 - Normalise capability data (clean section numbers, standardise test method refs)
 - AI enrichment: generate searchable descriptions per capability
 - API/MCP layer for agent discovery
