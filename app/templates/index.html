@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}UKAS Lab Search — Find accredited testing labs{% endblock %}
+{% block content %}
+<div class="text-center mt-12 mb-10">
+    <h1 class="text-4xl font-bold text-slate-800 mb-3">Find a UKAS-accredited lab</h1>
+    <p class="text-lg text-slate-500">Search 14,000+ testing capabilities across 1,500+ accredited laboratories</p>
+</div>
+
+<div class="max-w-2xl mx-auto mb-8">
+    <div class="flex gap-2">
+        <input id="search-input" type="text" placeholder="e.g. tensile testing of steel, asbestos air sampling, pressure gauge calibration"
+            class="flex-1 px-4 py-3 border border-slate-300 rounded-lg text-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+        <select id="region-filter" class="px-3 py-3 border border-slate-300 rounded-lg text-slate-600 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="">All regions</option>
+            <option value="London">London</option>
+            <option value="Manchester">Manchester</option>
+            <option value="Birmingham">Birmingham</option>
+            <option value="Leeds">Leeds</option>
+            <option value="Bristol">Bristol</option>
+            <option value="Glasgow">Glasgow</option>
+            <option value="Edinburgh">Edinburgh</option>
+            <option value="Cardiff">Cardiff</option>
+            <option value="Belfast">Belfast</option>
+            <option value="Sheffield">Sheffield</option>
+        </select>
+    </div>
+</div>
+
+<div id="status" class="text-center text-slate-400 mb-4 hidden"></div>
+
+<div id="results" class="space-y-4"></div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/search.js"></script>
+{% endblock %}

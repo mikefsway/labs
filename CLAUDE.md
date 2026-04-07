@@ -51,22 +51,47 @@ python scraper/batch_download.py
 python -c "import sys; sys.path.insert(0,'scraper'); from parse_schedule import parse_schedule; import json; print(json.dumps(parse_schedule('path/to/file.pdf'), indent=2))"
 ```
 
-## Embedding & Search Pipeline
+## Search & API
+
+- **Hybrid search**: tsvector full-text + pgvector cosine similarity, combined via RRF (Reciprocal Rank Fusion)
+  - `search_tsv` generated tsvector column + GIN index on capabilities
+  - `hybrid_search_capabilities(query_text, query_embedding, match_count, filter_region)` SQL function
+  - Fixes the "asbestos air sampling" problem — keyword match boosts domain-specific results
+- **FastAPI app** (`app/`): config, database, services (embedding, hybrid_search), routers (search, labs)
+  - `GET /api/search?q=...&limit=&region=` — hybrid search
+  - `POST /api/match` — multi-capability matching (find labs covering multiple needs)
+  - `GET /api/labs/{lab_id}` — full lab details + capabilities
+  - `GET /health` — health check
+- **Website**: Jinja2 templates + Tailwind Play CDN + vanilla JS, search-first B2B design
+- **MCP server** (`labs_mcp/`): 3 tools — search_lab_capabilities, get_lab, find_labs_for_multiple_tests
+  - Combined ASGI via `asgi.py` (FastAPI at /, MCP at /mcp)
+  - API key auth on MCP endpoint (LABS_MCP_API_KEYS env var)
+
+## Embedding Pipeline
 
 - `scraper/generate_embeddings.py` — Batch-embeds capabilities.search_text via OpenAI text-embedding-3-small (512 dims)
   - Resumable: only processes rows where embedding IS NULL
-  - Reads credentials from `.env` (OPENAI_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_KEY)
   - All 14,298 capabilities embedded as of 2026-04-07
-- `scraper/search.py` — Semantic search CLI: embeds a query and calls `match_capabilities` RPC
-  - Usage: `python scraper/search.py "tensile testing of steel"`
-- `match_capabilities(query_embedding, match_count)` — Supabase SQL function for cosine similarity search
-  - Joins capabilities → labs, returns lab_name, materials, test_type, standards, similarity score
-- **Known limitation**: short queries (e.g. "asbestos air sampling") match generic concepts ("air sampling") over specific labs. Hybrid search (keyword boost + vector) would fix this.
+- `scraper/search.py` — CLI search (legacy, uses pure vector search)
+
+## Commands
+
+```bash
+# Development
+source venv/bin/activate
+uvicorn app.main:app --reload --port 8000
+
+# Production (Render)
+gunicorn asgi:app -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
+```
+
+## Deployment
+
+- **Hosting**: Render (render.yaml)
+- **Env vars**: SUPABASE_URL, SUPABASE_SERVICE_KEY, OPENAI_API_KEY, LABS_MCP_API_KEYS
 
 ## Next Steps
 
-- Hybrid search: combine keyword filtering/boosting with vector similarity (RRF or keyword pre-filter)
 - Normalise capability data (clean section numbers, standardise test method refs)
 - AI enrichment: generate searchable descriptions per capability
-- API/MCP layer for agent discovery
-- Search UI or endpoint for "find me a lab that can test X"
+- Pick domain name and deploy

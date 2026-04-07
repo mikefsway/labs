@@ -1,0 +1,34 @@
+/* Relevance bar */
+.relevance-bar {
+    height: 4px;
+    border-radius: 2px;
+    background: #e2e8f0;
+}
+.relevance-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: #3b82f6;
+    transition: width 0.3s ease;
+}
+
+/* Loading spinner */
+.spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 2px solid #cbd5e1;
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+}
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Result cards hover */
+.result-card {
+    transition: box-shadow 0.15s ease;
+}
+.result-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
