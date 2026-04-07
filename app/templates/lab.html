@@ -1,13 +1,23 @@
 {% extends "base.html" %}
-{% block title %}Lab Detail — UKAS Lab Search{% endblock %}
+{% block title %}Lab Detail — LabScope{% endblock %}
 {% block content %}
-<a href="/" class="text-blue-600 hover:underline text-sm">&larr; Back to search</a>
+<div class="max-w-6xl mx-auto px-6 py-8">
+    <a href="/" id="back-link" class="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-accent transition-colors font-mono group mb-8">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="group-hover:-translate-x-0.5 transition-transform">
+            <path d="M10 3L5 8L10 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Back to search
+    </a>
 
-<div id="lab-header" class="mt-4 mb-8">
-    <div class="text-slate-400">Loading...</div>
+    <div id="lab-header" class="mb-10">
+        <div class="flex items-center gap-3 text-slate-500 font-mono text-sm">
+            <span class="search-spinner"></span>
+            <span>Loading lab data...</span>
+        </div>
+    </div>
+
+    <div id="capabilities-table"></div>
 </div>
-
-<div id="capabilities-table" class="mt-6"></div>
 {% endblock %}
 
 {% block scripts %}

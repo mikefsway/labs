@@ -1,15 +1,21 @@
-// Search page logic
+// LabScope — Search & Lab Detail Logic
 (function () {
-    const searchInput = document.getElementById("search-input");
-    const regionFilter = document.getElementById("region-filter");
-    const resultsDiv = document.getElementById("results");
-    const statusDiv = document.getElementById("status");
-
     // Lab detail page
     if (typeof LAB_ID !== "undefined") {
         loadLabDetail(LAB_ID);
         return;
     }
+
+    const searchInput = document.getElementById("search-input");
+    const searchForm = document.getElementById("search-form");
+    const searchBtn = document.getElementById("search-btn");
+    const regionFilter = document.getElementById("region-filter");
+    const resultsDiv = document.getElementById("results");
+    const statusDiv = document.getElementById("status");
+    const resultCount = document.getElementById("result-count");
+    const countValue = document.getElementById("count-value");
+    const aboutSection = document.getElementById("about-section");
+    const exampleSearches = document.getElementById("example-searches");
 
     if (!searchInput) return;
 
@@ -23,24 +29,39 @@
         doSearch();
     }
 
+    // Form submit (button click or Enter)
+    if (searchForm) {
+        searchForm.addEventListener("submit", (e) => {
+            e.preventDefault();
+            clearTimeout(debounceTimer);
+            doSearch();
+        });
+    }
+
+    // Auto-search on typing (debounced)
     searchInput.addEventListener("input", () => {
         clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(doSearch, 400);
+        debounceTimer = setTimeout(doSearch, 600);
     });
     regionFilter.addEventListener("change", doSearch);
 
-    searchInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-            clearTimeout(debounceTimer);
-            doSearch();
-        }
-    });
+    // Example search pills
+    if (exampleSearches) {
+        exampleSearches.addEventListener("click", (e) => {
+            if (e.target.dataset.query) {
+                searchInput.value = e.target.dataset.query;
+                doSearch();
+            }
+        });
+    }
 
     async function doSearch() {
         const q = searchInput.value.trim();
         if (q.length < 2) {
             resultsDiv.textContent = "";
             statusDiv.classList.add("hidden");
+            resultCount.classList.add("hidden");
+            if (aboutSection) aboutSection.classList.remove("hidden");
             return;
         }
 
@@ -53,217 +74,225 @@
         else url.searchParams.delete("region");
         history.replaceState(null, "", url);
 
-        // Show loading
-        statusDiv.textContent = "";
-        const spinner = document.createElement("span");
-        spinner.className = "spinner";
-        statusDiv.appendChild(spinner);
-        statusDiv.append(" Searching...");
+        // Loading state
         statusDiv.classList.remove("hidden");
+        resultCount.classList.add("hidden");
+        if (searchBtn) searchBtn.classList.add("search-btn-loading");
 
         try {
-            const apiUrl = `/api/search?q=${encodeURIComponent(q)}&limit=20${region ? "&region=" + encodeURIComponent(region) : ""}`;
+            const apiUrl = "/api/search?q=" + encodeURIComponent(q) + "&limit=20" +
+                (region ? "&region=" + encodeURIComponent(region) : "");
             const resp = await fetch(apiUrl);
             const data = await resp.json();
 
             statusDiv.classList.add("hidden");
+            if (searchBtn) searchBtn.classList.remove("search-btn-loading");
             resultsDiv.textContent = "";
 
+            // Hide about section when we have results
+            if (aboutSection) aboutSection.classList.add("hidden");
+
             if (!data.results || data.results.length === 0) {
-                const p = document.createElement("p");
-                p.className = "text-center text-slate-400";
-                p.textContent = "No results found.";
-                resultsDiv.appendChild(p);
+                const empty = document.createElement("div");
+                empty.className = "empty-state";
+                empty.textContent = "No matching capabilities found. Try a different query.";
+                resultsDiv.appendChild(empty);
+                resultCount.classList.add("hidden");
                 return;
             }
 
+            countValue.textContent = data.count;
+            resultCount.classList.remove("hidden");
+
             const maxRrf = data.results[0].rrf_score || 1;
-            data.results.forEach((r) => resultsDiv.appendChild(buildResultCard(r, maxRrf)));
+            data.results.forEach((r, idx) => {
+                const card = buildResultCard(r, maxRrf, idx);
+                resultsDiv.appendChild(card);
+            });
         } catch (err) {
-            statusDiv.textContent = "";
-            const errSpan = document.createElement("span");
-            errSpan.className = "text-red-500";
-            errSpan.textContent = "Search failed. Please try again.";
-            statusDiv.appendChild(errSpan);
+            statusDiv.classList.add("hidden");
+            if (searchBtn) searchBtn.classList.remove("search-btn-loading");
+            resultsDiv.textContent = "";
+            const errDiv = document.createElement("div");
+            errDiv.className = "empty-state";
+            errDiv.textContent = "Search failed. Please try again.";
+            resultsDiv.appendChild(errDiv);
         }
     }
 
-    function buildResultCard(r, maxRrf) {
+    function buildResultCard(r, maxRrf, idx) {
         const pct = Math.round(((r.rrf_score || 0) / maxRrf) * 100);
 
         const card = document.createElement("a");
-        card.href = `/lab/${r.lab_id}`;
-        card.className = "block bg-white border border-slate-200 rounded-lg p-5 result-card";
+        card.href = "/lab/" + r.lab_id;
+        card.className = "result-card result-enter";
+        card.style.animationDelay = (idx * 0.04) + "s";
 
-        const topRow = document.createElement("div");
-        topRow.className = "flex justify-between items-start mb-2";
+        // Top row: lab name + relevance
+        const top = el("div", "flex items-center justify-between gap-4 mb-3");
 
-        const info = document.createElement("div");
-        const name = document.createElement("h3");
-        name.className = "font-semibold text-blue-700";
+        const nameWrap = el("div", "min-w-0 flex-1");
+        const name = el("h3", "font-display font-semibold text-white text-[15px] truncate");
         name.textContent = r.lab_name || "";
-        const accred = document.createElement("span");
-        accred.className = "text-xs text-slate-400";
+        const accred = el("span", "font-mono text-[11px] text-slate-500 tracking-wide");
         accred.textContent = "UKAS #" + (r.accreditation_number || "");
-        info.appendChild(name);
-        info.appendChild(accred);
+        nameWrap.appendChild(name);
+        nameWrap.appendChild(accred);
 
-        const barWrap = document.createElement("div");
-        barWrap.className = "text-right";
-        const bar = document.createElement("div");
-        bar.className = "relevance-bar w-24";
-        const fill = document.createElement("div");
-        fill.className = "relevance-bar-fill";
-        fill.style.width = pct + "%";
-        bar.appendChild(fill);
-        barWrap.appendChild(bar);
+        const meterWrap = el("div", "flex items-center gap-2 flex-shrink-0");
+        const meterLabel = el("span", "font-mono text-[10px] text-slate-600");
+        meterLabel.textContent = pct + "%";
+        const meter = el("div", "relevance-meter");
+        const meterFill = el("div", "relevance-meter-fill");
+        meterFill.style.width = pct + "%";
+        meter.appendChild(meterFill);
+        meterWrap.appendChild(meterLabel);
+        meterWrap.appendChild(meter);
 
-        topRow.appendChild(info);
-        topRow.appendChild(barWrap);
+        top.appendChild(nameWrap);
+        top.appendChild(meterWrap);
 
-        const materials = document.createElement("p");
-        materials.className = "text-sm text-slate-700 mb-1";
-        const matLabel = document.createElement("strong");
-        matLabel.textContent = "Materials: ";
-        materials.appendChild(matLabel);
-        materials.append(truncate(r.materials_products || "", 120));
+        // Capability info
+        const body = el("div", "grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 mb-3");
 
-        const testType = document.createElement("p");
-        testType.className = "text-sm text-slate-700 mb-1";
-        const testLabel = document.createElement("strong");
-        testLabel.textContent = "Test: ";
-        testType.appendChild(testLabel);
-        testType.append(truncate(r.test_type || "", 120));
+        const matWrap = el("div", "");
+        const matLabel = el("span", "font-mono text-[10px] text-slate-600 uppercase tracking-wider");
+        matLabel.textContent = "Materials";
+        const matVal = el("p", "text-sm text-slate-300 leading-snug mt-0.5");
+        matVal.textContent = truncate(r.materials_products || "", 100);
+        matWrap.appendChild(matLabel);
+        matWrap.appendChild(matVal);
 
-        const addr = document.createElement("p");
-        addr.className = "text-xs text-slate-400";
-        addr.textContent = truncate(r.address || "", 80);
+        const testWrap = el("div", "");
+        const testLabel = el("span", "font-mono text-[10px] text-slate-600 uppercase tracking-wider");
+        testLabel.textContent = "Test Type";
+        const testVal = el("p", "text-sm text-slate-300 leading-snug mt-0.5");
+        testVal.textContent = truncate(r.test_type || "", 100);
+        testWrap.appendChild(testLabel);
+        testWrap.appendChild(testVal);
 
-        card.appendChild(topRow);
-        card.appendChild(materials);
-        card.appendChild(testType);
-        card.appendChild(addr);
+        body.appendChild(matWrap);
+        body.appendChild(testWrap);
+
+        // Address footer
+        const footer = el("div", "flex items-center gap-2 text-xs text-slate-600");
+        const pinIcon = el("span", "");
+        pinIcon.textContent = "\u25CB";
+        const addr = el("span", "truncate");
+        addr.textContent = truncate(r.address || "", 70);
+        footer.appendChild(pinIcon);
+        footer.appendChild(addr);
+
+        card.appendChild(top);
+        card.appendChild(body);
+        card.appendChild(footer);
 
         return card;
     }
 
-    function truncate(s, n) {
-        const clean = s.replace(/\n/g, " ").trim();
-        return clean.length > n ? clean.slice(0, n) + "\u2026" : clean;
-    }
+    // --- Lab Detail Page ---
 
-    // Lab detail page
     async function loadLabDetail(labId) {
         const header = document.getElementById("lab-header");
         const tableDiv = document.getElementById("capabilities-table");
+        const backLink = document.getElementById("back-link");
+
+        // Restore back link to search
+        if (document.referrer && document.referrer.includes("?q=")) {
+            backLink.href = document.referrer;
+        }
 
         try {
-            const resp = await fetch(`/api/labs/${labId}`);
+            const resp = await fetch("/api/labs/" + labId);
             if (!resp.ok) {
-                header.textContent = "Lab not found.";
+                header.textContent = "";
+                const err = el("div", "empty-state");
+                err.textContent = "Lab not found.";
+                header.appendChild(err);
                 return;
             }
             const data = await resp.json();
             const lab = data.lab;
             const caps = data.capabilities;
 
-            // Build header
+            // Header
             header.textContent = "";
 
-            const h1 = document.createElement("h1");
-            h1.className = "text-3xl font-bold text-slate-800 mb-1";
+            const topMeta = el("div", "flex items-center gap-3 mb-4");
+            const pill = el("span", "tag-pill");
+            pill.textContent = "UKAS #" + (lab.accreditation_number || "");
+            topMeta.appendChild(pill);
+            if (lab.standard) {
+                const stdPill = el("span", "font-mono text-[11px] text-slate-500");
+                stdPill.textContent = lab.standard;
+                topMeta.appendChild(stdPill);
+            }
+            header.appendChild(topMeta);
+
+            const h1 = el("h1", "text-3xl sm:text-4xl font-display font-bold text-white leading-tight mb-8");
             h1.textContent = lab.lab_name;
-
-            const sub = document.createElement("p");
-            sub.className = "text-slate-500 mb-4";
-            sub.textContent = `UKAS Accreditation #${lab.accreditation_number} \u00B7 ${lab.standard || ""}`;
-
-            const grid = document.createElement("div");
-            grid.className = "grid grid-cols-1 md:grid-cols-2 gap-4 bg-white border border-slate-200 rounded-lg p-5";
-
-            const addrBlock = document.createElement("div");
-            const addrLabel = document.createElement("p");
-            addrLabel.className = "text-sm text-slate-500";
-            addrLabel.textContent = "Address";
-            const addrVal = document.createElement("p");
-            addrVal.className = "text-sm";
-            addrVal.textContent = lab.address || "\u2014";
-            addrBlock.appendChild(addrLabel);
-            addrBlock.appendChild(addrVal);
-
-            const contactBlock = document.createElement("div");
-            const contactLabel = document.createElement("p");
-            contactLabel.className = "text-sm text-slate-500";
-            contactLabel.textContent = "Contact";
-            contactBlock.appendChild(contactLabel);
-
-            if (lab.contact) {
-                const c = document.createElement("p");
-                c.className = "text-sm";
-                c.textContent = lab.contact;
-                contactBlock.appendChild(c);
-            }
-            if (lab.phone) {
-                const p = document.createElement("p");
-                p.className = "text-sm";
-                p.textContent = lab.phone;
-                contactBlock.appendChild(p);
-            }
-            if (lab.email) {
-                const p = document.createElement("p");
-                p.className = "text-sm";
-                const a = document.createElement("a");
-                a.href = "mailto:" + lab.email;
-                a.className = "text-blue-600 hover:underline";
-                a.textContent = lab.email;
-                p.appendChild(a);
-                contactBlock.appendChild(p);
-            }
-            if (lab.website) {
-                const p = document.createElement("p");
-                p.className = "text-sm";
-                const a = document.createElement("a");
-                a.href = lab.website.startsWith("http") ? lab.website : "https://" + lab.website;
-                a.target = "_blank";
-                a.rel = "noopener";
-                a.className = "text-blue-600 hover:underline";
-                a.textContent = lab.website;
-                p.appendChild(a);
-                contactBlock.appendChild(p);
-            }
-
-            grid.appendChild(addrBlock);
-            grid.appendChild(contactBlock);
-
             header.appendChild(h1);
-            header.appendChild(sub);
+
+            // Info grid
+            const grid = el("div", "info-grid mb-10");
+            const fields = [
+                { label: "Address", value: lab.address },
+                { label: "Contact", value: lab.contact },
+                { label: "Phone", value: lab.phone },
+                { label: "Email", value: lab.email, link: lab.email ? "mailto:" + lab.email : null },
+                { label: "Website", value: lab.website, link: lab.website ? (lab.website.startsWith("http") ? lab.website : "https://" + lab.website) : null, external: true },
+            ];
+
+            fields.forEach((f) => {
+                if (!f.value) return;
+                const cell = el("div", "info-cell");
+                const lbl = el("div", "info-cell-label");
+                lbl.textContent = f.label;
+                const val = el("div", "info-cell-value");
+                if (f.link) {
+                    const a = document.createElement("a");
+                    a.href = f.link;
+                    a.textContent = f.value;
+                    if (f.external) { a.target = "_blank"; a.rel = "noopener"; }
+                    val.appendChild(a);
+                } else {
+                    val.textContent = f.value || "\u2014";
+                }
+                cell.appendChild(lbl);
+                cell.appendChild(val);
+                grid.appendChild(cell);
+            });
+
             header.appendChild(grid);
 
-            // Build capabilities table
+            // Capabilities
             if (!caps || caps.length === 0) {
-                tableDiv.textContent = "No capabilities listed.";
+                tableDiv.textContent = "";
+                const empty = el("div", "empty-state");
+                empty.textContent = "No capabilities listed.";
+                tableDiv.appendChild(empty);
                 return;
             }
 
             tableDiv.textContent = "";
 
-            const heading = document.createElement("h2");
-            heading.className = "text-xl font-semibold text-slate-700 mb-3";
-            heading.textContent = caps.length + " Capabilities";
-            tableDiv.appendChild(heading);
+            const capHeader = el("div", "flex items-center justify-between mb-4");
+            const capTitle = el("h2", "text-xl font-display font-semibold text-white");
+            capTitle.textContent = "Capabilities";
+            const capCount = el("span", "font-mono text-xs text-slate-500");
+            capCount.textContent = caps.length + " entries";
+            capHeader.appendChild(capTitle);
+            capHeader.appendChild(capCount);
+            tableDiv.appendChild(capHeader);
 
-            const wrapper = document.createElement("div");
-            wrapper.className = "overflow-x-auto";
-
+            const wrapper = el("div", "overflow-x-auto rounded-xl border border-white/[0.06]");
             const table = document.createElement("table");
-            table.className = "w-full text-sm border-collapse";
+            table.className = "cap-table";
 
             const thead = document.createElement("thead");
             const headRow = document.createElement("tr");
-            headRow.className = "bg-slate-100 text-left";
-            ["Materials / Products", "Test Type", "Standards"].forEach((h) => {
+            ["#", "Materials / Products", "Test Type", "Standards"].forEach((h) => {
                 const th = document.createElement("th");
-                th.className = "px-3 py-2 border-b font-medium text-slate-600";
                 th.textContent = h;
                 headRow.appendChild(th);
             });
@@ -271,23 +300,44 @@
             table.appendChild(thead);
 
             const tbody = document.createElement("tbody");
-            caps.forEach((c) => {
+            caps.forEach((c, i) => {
                 const tr = document.createElement("tr");
-                tr.className = "border-b border-slate-100 hover:bg-slate-50";
+
+                const idxTd = document.createElement("td");
+                idxTd.className = "row-idx";
+                idxTd.textContent = String(i + 1);
+                tr.appendChild(idxTd);
+
                 ["materials_products", "test_type", "standards"].forEach((field) => {
                     const td = document.createElement("td");
-                    td.className = "px-3 py-2 align-top whitespace-pre-line";
                     td.textContent = c[field] || "";
                     tr.appendChild(td);
                 });
                 tbody.appendChild(tr);
             });
+
             table.appendChild(tbody);
             wrapper.appendChild(table);
             tableDiv.appendChild(wrapper);
 
         } catch (err) {
-            header.textContent = "Failed to load lab details.";
+            header.textContent = "";
+            const errDiv = el("div", "empty-state");
+            errDiv.textContent = "Failed to load lab details.";
+            header.appendChild(errDiv);
         }
+    }
+
+    // --- Helpers ---
+
+    function el(tag, className) {
+        const e = document.createElement(tag);
+        if (className) e.className = className;
+        return e;
+    }
+
+    function truncate(s, n) {
+        const clean = s.replace(/\n/g, " ").trim();
+        return clean.length > n ? clean.slice(0, n) + "\u2026" : clean;
     }
 })();

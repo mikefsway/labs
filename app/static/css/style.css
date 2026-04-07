@@ -1,34 +1,280 @@
-/* Relevance bar */
-.relevance-bar {
-    height: 4px;
-    border-radius: 2px;
-    background: #e2e8f0;
-}
-.relevance-bar-fill {
-    height: 100%;
-    border-radius: 2px;
-    background: #3b82f6;
-    transition: width 0.3s ease;
+/* ============================================
+   LabScope — Precision Instrument Aesthetic
+   ============================================ */
+
+/* --- Graph paper grid background --- */
+.hero-grid {
+    background-image:
+        linear-gradient(rgba(14, 165, 233, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(14, 165, 233, 0.03) 1px, transparent 1px),
+        linear-gradient(rgba(14, 165, 233, 0.015) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(14, 165, 233, 0.015) 1px, transparent 1px);
+    background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
 }
 
-/* Loading spinner */
-.spinner {
-    display: inline-block;
-    width: 20px;
-    height: 20px;
-    border: 2px solid #cbd5e1;
-    border-top-color: #3b82f6;
-    border-radius: 50%;
-    animation: spin 0.6s linear infinite;
+.hero-grid::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom, transparent 60%, #020617 100%);
+    pointer-events: none;
 }
+
+/* --- Staggered entrance animation --- */
+.hero-fade {
+    opacity: 0;
+    transform: translateY(12px);
+    animation: heroFadeIn 0.6s ease-out forwards;
+}
+
+@keyframes heroFadeIn {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* --- Search spinner --- */
+.search-spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 1.5px solid rgba(148, 163, 184, 0.2);
+    border-top-color: #0ea5e9;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+}
+
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
 
-/* Result cards hover */
+/* --- Result cards --- */
 .result-card {
-    transition: box-shadow 0.15s ease;
+    position: relative;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    transition: all 0.2s ease;
+    overflow: hidden;
 }
+
+.result-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    border-radius: 3px 0 0 3px;
+    background: linear-gradient(to bottom, #0ea5e9, #0d9488);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
 .result-card:hover {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(14, 165, 233, 0.15);
+    transform: translateX(2px);
+}
+
+.result-card:hover::before {
+    opacity: 1;
+}
+
+/* --- Relevance meter --- */
+.relevance-meter {
+    width: 48px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.06);
+    overflow: hidden;
+}
+
+.relevance-meter-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: linear-gradient(90deg, #0ea5e9, #14b8a6);
+    transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* --- Tag pill --- */
+.tag-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    background: rgba(14, 165, 233, 0.08);
+    color: #0ea5e9;
+    border: 1px solid rgba(14, 165, 233, 0.15);
+}
+
+/* --- Lab detail page --- */
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.info-cell {
+    padding: 1.25rem 1.5rem;
+    background: #020617;
+}
+
+.info-cell-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #64748b;
+    margin-bottom: 6px;
+}
+
+.info-cell-value {
+    font-size: 14px;
+    color: #e2e8f0;
+}
+
+.info-cell-value a {
+    color: #0ea5e9;
+    text-decoration: none;
+    transition: color 0.15s;
+}
+
+.info-cell-value a:hover {
+    color: #38bdf8;
+    text-decoration: underline;
+}
+
+/* --- Capabilities table --- */
+.cap-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 13px;
+}
+
+.cap-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #0c1222;
+    padding: 10px 14px;
+    text-align: left;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #64748b;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.cap-table tbody td {
+    padding: 12px 14px;
+    vertical-align: top;
+    white-space: pre-line;
+    color: #cbd5e1;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    line-height: 1.5;
+}
+
+.cap-table tbody tr {
+    transition: background 0.15s;
+}
+
+.cap-table tbody tr:hover {
+    background: rgba(14, 165, 233, 0.03);
+}
+
+/* --- Row index numbers --- */
+.row-idx {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: #334155;
+    min-width: 32px;
+}
+
+/* --- Result card entrance --- */
+.result-enter {
+    opacity: 0;
+    transform: translateY(8px);
+    animation: resultSlideIn 0.3s ease-out forwards;
+}
+
+@keyframes resultSlideIn {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* --- Scrollbar styling --- */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* --- Select dropdown dark override --- */
+select option {
+    background: #131d35;
+    color: #e2e8f0;
+}
+
+/* --- Empty state --- */
+.empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #475569;
+    font-family: 'DM Mono', monospace;
+    font-size: 14px;
+}
+
+/* --- Example search pills --- */
+.example-pill {
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: 'DM Mono', monospace;
+    color: #94a3b8;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.example-pill:hover {
+    color: #0ea5e9;
+    border-color: rgba(14, 165, 233, 0.3);
+    background: rgba(14, 165, 233, 0.05);
+}
+
+/* --- Search button loading state --- */
+.search-btn-loading {
+    opacity: 0.7;
+    pointer-events: none;
 }
