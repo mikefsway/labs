@@ -72,11 +72,20 @@ def parse_header(page) -> dict:
                     if "Testing performed" in cell or "Calibration performed" in cell:
                         header["site_info"] = cell.strip()
 
-    # Extract accreditation number and lab name from text
+    # Extract accreditation number from text or table cells
     for line in lines:
         line = line.strip()
         if re.match(r"^\d{4,5}$", line):
             header["accreditation_number"] = line
+    # Also check table cells for accreditation number (e.g. "22061\nAccredited to...")
+    if not header["accreditation_number"] and tables:
+        for table in tables:
+            for row in table:
+                for cell in row:
+                    if cell and "Accredited to" in cell:
+                        m = re.match(r"(\d{4,5})\s*\n", cell)
+                        if m:
+                            header["accreditation_number"] = m.group(1)
 
     # Lab name: look in the header table for the cell with the company name
     if tables:
@@ -107,13 +116,21 @@ def parse_header(page) -> dict:
                         # Could be the lab name
                         pass
 
-    # Address: extract from the cell that has the address lines
+    # Standard: extract from text or table cells
     for line in lines:
         line = line.strip()
         if "Accredited to" in line:
             m = re.search(r"(ISO/IEC\s*\d+:\d+)", text)
             if m:
                 header["standard"] = m.group(1)
+    if not header["standard"] and tables:
+        for table in tables:
+            for row in table:
+                for cell in row:
+                    if cell and "ISO/IEC" in cell:
+                        m = re.search(r"(ISO/IEC\s*\d+:\d+)", cell)
+                        if m:
+                            header["standard"] = m.group(1)
 
     # Get address from the cell block between lab name and contact
     if tables:
@@ -127,7 +144,17 @@ def parse_header(page) -> dict:
                     # Check if this looks like an address block
                     has_postcode = any(re.search(r"[A-Z]{1,2}\d{1,2}\s*\d[A-Z]{2}", l) for l in cell_lines)
                     if has_postcode and len(cell_lines) >= 2:
-                        header["address_lines"] = cell_lines
+                        # Filter out contact info lines that got merged with address
+                        addr_lines = []
+                        for l in cell_lines:
+                            if any(marker in l for marker in [
+                                "Contact:", "Tel:", "Fax:", "E-Mail:", "E-mail:",
+                                "Website:", "Address",
+                            ]):
+                                continue
+                            addr_lines.append(l)
+                        if addr_lines and not header["address_lines"]:
+                            header["address_lines"] = addr_lines
 
     header["address"] = ", ".join(header["address_lines"]) if header["address_lines"] else ""
     del header["address_lines"]
@@ -135,50 +162,120 @@ def parse_header(page) -> dict:
     return header
 
 
+def is_header_banner_table(table) -> bool:
+    """Check if a table is the repeating page header banner (not capability data)."""
+    if not table or len(table) < 1:
+        return False
+    # Header banners contain these markers in any cell
+    banner_markers = [
+        "Schedule of Accreditation",
+        "United Kingdom Accredita",
+        "Pine Trees",
+        "Accredited to",
+        "Issue No:",
+    ]
+    for row in table[:3]:
+        for cell in row:
+            if cell and any(m in cell for m in banner_markers):
+                return True
+    return False
+
+
+def is_column_header_row(row) -> bool:
+    """Check if a row is a column header (not data)."""
+    combined = " ".join((c or "") for c in row)
+    header_markers = [
+        "Materials/Products",
+        "Type of test",
+        "Measured Quantity",
+        "Instrument or Gauge",
+        "Expanded\nMeasurement",
+        "Expanded Measurement",
+        "Expa nded",  # OCR artifact variant
+        "Location details",
+        "Location\ncode",
+    ]
+    return any(m in combined for m in header_markers)
+
+
 def parse_capability_tables(pdf) -> list[dict]:
-    """Extract capability rows from the three-column tables in pages 2+."""
+    """Extract capability rows from the capability tables across all pages."""
     capabilities = []
 
     for page_num, page in enumerate(pdf.pages):
-        if page_num == 0:
-            continue
-
         tables = page.extract_tables()
 
         for table in tables:
             if not table:
                 continue
 
+            # Skip entire header banner tables
+            if is_header_banner_table(table):
+                continue
+
             for row in table:
                 if not row or len(row) < 3:
+                    continue
+
+                # Skip column header rows
+                if is_column_header_row(row):
                     continue
 
                 col0 = (row[0] or "").strip()
                 col1 = (row[1] or "").strip()
                 col2 = (row[2] or "").strip()
 
-                # Skip the column header row
-                if "Materials/Products" in col0 or "Type of test" in col1:
-                    continue
+                # Some calibration tables have an extra empty column after col0
+                # (6 cols where col1 is empty and real data is in cols 2-5)
+                if len(row) >= 5 and not col1 and col0:
+                    # Check if col2 looks like range data or col3 has uncertainty
+                    col3 = (row[3] or "").strip()
+                    if col2 or col3:
+                        col1 = col2
+                        col2 = col3
 
-                # Skip the repeating page header banner (Table 0)
+                # Skip metadata rows
                 skip_markers = [
-                    "Schedule of Accreditation",
-                    "United Kingdom Accredita",
                     "Accredited to",
                     "ISO/IEC 17025",
                     "Testing performed",
                     "Calibration performed",
-                    "Pine Trees",
                     "Issue No:",
                 ]
                 combined = col0 + col1 + col2
                 if any(m in combined for m in skip_markers):
                     continue
 
+                # Skip location detail rows (multi-site PDFs)
+                # These contain "Address" + contact info or "Local contact"
+                if "Local contact" in combined:
+                    continue
+                if col0.startswith("Address") or col0.startswith("At customer"):
+                    continue
+                # Skip rows about customer premises or site suitability
+                if "customer" in combined.lower() or "Client Premises" in combined:
+                    continue
+                if "All sites suitable" in combined or "All locations suitable" in combined:
+                    continue
+                # Skip rows that are just contact info
+                if col1.startswith("Local Contact:") or col1.startswith("Local contact:"):
+                    continue
+
                 # Skip empty rows
                 if not col0 and not col1 and not col2:
                     continue
+
+                # Skip rows that are just location codes (short, no real data)
+                all_short = all(len(c) <= 5 for c in [col0, col1, col2] if c)
+                if all_short and not any(c for c in [col0, col1, col2] if len(c) > 3):
+                    continue
+
+                # Skip section-header-only rows (e.g. "RANGE IN MILLIMETRES...")
+                # These span the full width and have no data in other cols
+                if col0 and not col1 and not col2:
+                    # Check if it's a section header (ALL CAPS, no actual test data)
+                    if col0.isupper() and len(col0) > 20:
+                        continue
 
                 # Clean up "As listed on Page X"
                 if col0.startswith("As listed on"):
@@ -302,6 +399,18 @@ def parse_schedule(pdf_path: str) -> dict:
         header = parse_header(pdf.pages[0])
         raw_capabilities = parse_capability_tables(pdf)
         capabilities = merge_continuation_rows(raw_capabilities)
+
+    # Reject non-schedule documents (no accreditation number = guidance doc, not a lab)
+    if not header["accreditation_number"]:
+        return {
+            "header": header,
+            "capabilities": [],
+            "total_pages": len(pdfplumber.open(pdf_path).pages),
+            "source_pdf": str(pdf_path),
+        }
+
+    # Clean up header standard field (remove embedded newlines)
+    header["standard"] = header["standard"].replace("\n", " ").strip()
 
     # Filter out noise: empty capabilities, "END" markers, section-only headers
     cleaned = []
