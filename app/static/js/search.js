@@ -217,14 +217,12 @@
     }
 
     function buildResultCard(r, maxRrf, idx) {
-        const pct = Math.round(((r.rrf_score || 0) / maxRrf) * 100);
-
         const card = document.createElement("a");
         card.href = "/lab/" + r.lab_id;
         card.className = "result-card result-enter";
         card.style.animationDelay = (idx * 0.04) + "s";
 
-        // Top row: lab name + relevance
+        // Top row: lab name + accreditation
         const top = el("div", "flex items-center justify-between gap-4 mb-3");
 
         const nameWrap = el("div", "min-w-0 flex-1");
@@ -235,18 +233,7 @@
         nameWrap.appendChild(name);
         nameWrap.appendChild(accred);
 
-        const meterWrap = el("div", "flex items-center gap-2 flex-shrink-0");
-        const meterLabel = el("span", "font-mono text-[10px] text-slate-600");
-        meterLabel.textContent = pct + "%";
-        const meter = el("div", "relevance-meter");
-        const meterFill = el("div", "relevance-meter-fill");
-        meterFill.style.width = pct + "%";
-        meter.appendChild(meterFill);
-        meterWrap.appendChild(meterLabel);
-        meterWrap.appendChild(meter);
-
         top.appendChild(nameWrap);
-        top.appendChild(meterWrap);
 
         // Capability info
         const body = el("div", "grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 mb-3");
@@ -287,14 +274,12 @@
     }
 
     function buildLabCard(r, maxRrf, idx) {
-        const pct = Math.round(((r.rrf_score || 0) / maxRrf) * 100);
-
         const card = document.createElement("a");
         card.href = "/lab/" + r.lab_id;
         card.className = "result-card result-enter";
         card.style.animationDelay = (idx * 0.04) + "s";
 
-        // Top row: title + relevance
+        // Top row: title + accreditation
         const top = el("div", "flex items-center justify-between gap-4 mb-2");
 
         const nameWrap = el("div", "min-w-0 flex-1");
@@ -305,18 +290,7 @@
         nameWrap.appendChild(name);
         nameWrap.appendChild(accred);
 
-        const meterWrap = el("div", "flex items-center gap-2 flex-shrink-0");
-        const meterLabel = el("span", "font-mono text-[10px] text-slate-600");
-        meterLabel.textContent = pct + "%";
-        const meter = el("div", "relevance-meter");
-        const meterFill = el("div", "relevance-meter-fill");
-        meterFill.style.width = pct + "%";
-        meter.appendChild(meterFill);
-        meterWrap.appendChild(meterLabel);
-        meterWrap.appendChild(meter);
-
         top.appendChild(nameWrap);
-        top.appendChild(meterWrap);
 
         // Brief
         const brief = el("p", "text-sm text-slate-300 leading-relaxed mb-3");
