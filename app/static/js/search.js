@@ -461,16 +461,42 @@
 
             header.appendChild(grid);
 
-            // Fraglet detail (if available)
+            // Fraglet summary (brief + capabilities from additional)
             if (data.fraglet) {
                 const fragDiv = el("div", "mb-10 p-6 rounded-xl border border-white/[0.06] bg-white/[0.02]");
-                const fragLabel = el("div", "font-mono text-[10px] text-accent tracking-widest uppercase mb-3");
-                fragLabel.textContent = "About this lab";
-                const fragText = el("p", "text-sm text-slate-300 leading-relaxed");
-                fragText.textContent = data.fraglet.detail;
-                fragDiv.appendChild(fragLabel);
-                fragDiv.appendChild(fragText);
 
+                // Brief
+                if (data.fraglet.brief) {
+                    const fragBrief = el("p", "text-sm text-slate-300 leading-relaxed mb-4");
+                    fragBrief.textContent = data.fraglet.brief;
+                    fragDiv.appendChild(fragBrief);
+                }
+
+                // Capability clusters from additional
+                if (data.fraglet.additional && data.fraglet.additional.capabilities) {
+                    const capsLabel = el("div", "font-mono text-[10px] text-accent tracking-widest uppercase mb-3");
+                    capsLabel.textContent = "Accredited capabilities";
+                    fragDiv.appendChild(capsLabel);
+                    data.fraglet.additional.capabilities.forEach((cap) => {
+                        const capCard = el("div", "mb-3 last:mb-0");
+                        const capSummary = el("div", "text-sm text-white font-semibold mb-1");
+                        capSummary.textContent = cap.summary || "";
+                        capCard.appendChild(capSummary);
+                        if (cap.materials_products) {
+                            const matLine = el("div", "text-xs text-slate-400");
+                            matLine.textContent = cap.materials_products;
+                            capCard.appendChild(matLine);
+                        }
+                        if (cap.standards) {
+                            const stdLine = el("div", "text-xs text-slate-500 font-mono mt-0.5");
+                            stdLine.textContent = cap.standards;
+                            capCard.appendChild(stdLine);
+                        }
+                        fragDiv.appendChild(capCard);
+                    });
+                }
+
+                // Tags
                 if (data.fraglet.tags && data.fraglet.tags.length > 0) {
                     const fragTags = el("div", "flex flex-wrap gap-1.5 mt-4");
                     data.fraglet.tags.forEach((t) => {
@@ -482,6 +508,22 @@
                 }
 
                 header.appendChild(fragDiv);
+            }
+
+            // UKAS schedule PDF links
+            if (data.schedule_pdfs && data.schedule_pdfs.length > 0) {
+                const pdfDiv = el("div", "mb-10 flex flex-wrap gap-3");
+                data.schedule_pdfs.forEach((url) => {
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.target = "_blank";
+                    a.rel = "noopener";
+                    a.className = "inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 bg-white/[0.04] text-sm text-slate-300 hover:border-accent/50 hover:text-white transition-colors";
+                    const label = url.includes("Calibration") ? "Calibration schedule" : "Testing schedule";
+                    a.textContent = label + " (PDF)";
+                    pdfDiv.appendChild(a);
+                });
+                header.appendChild(pdfDiv);
             }
 
             // Sites
