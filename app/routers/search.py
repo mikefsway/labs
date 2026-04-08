@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
@@ -5,6 +7,7 @@ from app.services.hybrid_search import (
     find_multi_capability_labs,
     search_capabilities,
     search_lab_fraglets,
+    search_standards,
 )
 from app.services.recommendation import generate_recommendation
 
@@ -28,10 +31,20 @@ async def search_labs(
     region: str | None = Query(None, description="Region filter (e.g. 'London')"),
     recommend: bool = Query(False, description="Include LLM recommendation"),
 ):
-    results = await search_lab_fraglets(q, limit=limit, region=region)
+    if recommend:
+        # Search labs and standards in parallel
+        labs_task = search_lab_fraglets(q, limit=limit, region=region)
+        standards_task = search_standards(q, limit=5)
+        results, standards = await asyncio.gather(labs_task, standards_task)
+    else:
+        results = await search_lab_fraglets(q, limit=limit, region=region)
+        standards = None
+
     resp = {"query": q, "count": len(results), "results": results}
     if recommend and results:
-        resp["recommendation"] = await generate_recommendation(q, results, mode="labs")
+        resp["recommendation"] = await generate_recommendation(
+            q, results, standards=standards, mode="labs"
+        )
     return resp
 
 

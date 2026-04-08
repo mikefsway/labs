@@ -120,11 +120,26 @@
             const maxRrf = data.results[0].rrf_score || 1;
 
             // Interleaved recommendation groups + cards
-            if (data.recommendation && Array.isArray(data.recommendation) && data.recommendation.length > 0) {
+            const rec = data.recommendation;
+            const groups = rec && rec.groups ? rec.groups : (Array.isArray(rec) ? rec : null);
+
+            if (groups && groups.length > 0) {
+                // Standards advice panel
+                if (rec.standards_advice) {
+                    const advicePanel = el("div", "mb-6 p-5 rounded-xl border border-accent/20 bg-accent/5");
+                    const adviceLabel = el("div", "font-mono text-[10px] text-accent tracking-widest uppercase mb-2");
+                    adviceLabel.textContent = "Standards guidance";
+                    advicePanel.appendChild(adviceLabel);
+                    const adviceText = el("p", "text-sm text-slate-300 leading-relaxed");
+                    adviceText.textContent = rec.standards_advice;
+                    advicePanel.appendChild(adviceText);
+                    resultsDiv.appendChild(advicePanel);
+                }
+
                 const groupedLabIds = new Set();
                 let cardIdx = 0;
 
-                data.recommendation.forEach((group) => {
+                groups.forEach((group) => {
                     // Group heading + explanation
                     const groupPanel = el("div", "mb-2 mt-6 first:mt-0");
                     const heading = el("h3", "font-display font-semibold text-accent text-sm mb-1");
