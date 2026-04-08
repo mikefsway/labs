@@ -1,106 +1,121 @@
-# LabScope — UKAS Lab Testing Discovery
+# LabCurate — Testing Laboratory Advisor
 
-B2B proof of concept: search-first discovery of UKAS-accredited lab testing capabilities. Part of the fraglets supply-side model — each capability is a discoverable, embeddable unit.
+labcurate.com — B2B testing laboratory advisor. Curates UKAS-accredited lab capabilities, matches against 45k+ standards, and provides AI-powered recommendations.
 
 ## Architecture
 
-- **Data source**: UKAS (United Kingdom Accreditation Service) WordPress site
-  - REST API: `/wp-json/wp/v2/organisation`, `/wp-json/wp/v2/media`
-  - Schedule PDFs: ~3,474 PDFs containing structured capability tables
+- **Data sources**:
+  - UKAS WordPress REST API + schedule PDFs (1,524 labs, 14,298 capabilities)
+  - ISO Open Data (44,807 standards with scopes)
+  - ASTM store scrape (505 standards with titles/scopes)
 - **Database**: Supabase with pgvector (project `ltbkkikpqijldicdjhpx`)
-  - `labs` table (1,524 rows): name, accreditation #, address, contact, email, website
-  - `capabilities` table (14,298 rows): materials_products, test_type, standards, search_text, embedding vector(512), search_tsv tsvector
-  - IVFFlat index on embedding (100 lists), GIN index on search_tsv
+  - `labs` — 1,524 rows: name, accreditation #, address, contact, lat/lng, schedule_pdfs JSONB
+  - `capabilities` — 14,298 rows: materials_products, test_type, standards, embedding vector(512), search_tsv
+  - `lab_fraglets` — 1,210 rows: AI-generated descriptions, additional JSONB, embedding vector(512)
+  - `lab_sites` — 88 rows: multi-site labs with addresses, lat/lng, capabilities_summary, site_code
+  - `standards` — 77,261 rows (45,312 with embeddings): ISO + ASTM, reference, title, scope
+  - IVFFlat/GIN indexes on embedding and search_tsv columns
 - **Backend**: FastAPI + MCP server, combined ASGI via `asgi.py`
 - **Frontend**: Jinja2 templates + Tailwind Play CDN + vanilla JS (no build step)
-  - Dark "precision instrument" theme: DM Mono + Plus Jakarta Sans fonts
-  - Search-first design with example queries, about section, API/MCP docs inline
+  - Advisor UI: textarea input, "Find labs" button, search only on submit
+  - Dark theme: DM Mono + Plus Jakarta Sans fonts
+- **LLM**: GPT-5.4-mini for recommendations (use `max_completion_tokens` not `max_tokens`)
+- **Geocoding**: postcodes.io (free, no key) for UK postcodes and place names
 - **Hosting**: Render (render.yaml), single web service
 
 ## Project structure
 
 ```
 app/
-  main.py                  # FastAPI app + static mount + page routes
+  main.py                  # FastAPI app + basic auth + page routes
   config.py                # Pydantic Settings from .env
   database.py              # Supabase service client factory
   routers/
-    search.py              # GET /api/search, POST /api/match
+    search.py              # GET /api/search, GET /api/search/labs, POST /api/match
     labs.py                # GET /api/labs/{lab_id}
   services/
     embedding.py           # OpenAI text-embedding-3-small (512 dims)
-    hybrid_search.py       # Orchestrates embed + RPC call + multi-match
+    hybrid_search.py       # Orchestrates embed + RPC calls (capabilities, fraglets, standards)
+    recommendation.py      # GPT-5.4-mini advisor: standards advice + lab grouping + cross-reference
+    geocode.py             # postcodes.io geocoding
   templates/               # Jinja2: base.html, index.html, lab.html
   static/                  # css/style.css, js/search.js
 labs_mcp/
   server.py                # FastMCP: 3 tools for AI agent access
 asgi.py                    # Combined ASGI: FastAPI at /, MCP at /mcp
-scraper/                   # Data pipeline (fetch, parse, embed)
-data/                      # Scraped data, market research, project plan
+scraper/
+  fetch_orgs.py            # Fetch org records from UKAS REST API
+  fetch_schedules.py       # Discover schedule PDF URLs from media API
+  parse_schedule.py        # Parse schedule PDFs into structured capability JSON
+  batch_download.py        # Batch download + parse all PDFs, resumable
+  generate_embeddings.py   # Batch-embed capabilities (resumable, 100/batch)
+  embed_fraglets.py        # Embed lab_fraglets (title+brief+detail+tags)
+  embed_standards.py       # Embed standards (reference+title+scope)
+  scrape_astm.py           # Scrape ASTM titles from store.astm.org (resumable)
+  scrape_astm_guess.py     # Year-guess variant for ASTM refs without year suffix
+  load_astm_standards.py   # Load scraped ASTM into Supabase + embed
+  search.py                # Legacy CLI search (superseded)
+data/                      # Scraped data (gitignored), schedule_pdfs.json, astm_standards.json
 render.yaml                # Render deployment config
 ```
 
-## Search
+## Recommendation flow
 
-- **Hybrid search**: tsvector full-text + pgvector cosine similarity, combined via RRF (Reciprocal Rank Fusion, k=60)
-  - `hybrid_search_capabilities(query_text, query_embedding, match_count, filter_region)` SQL function
-  - Two CTEs ranked independently, FULL OUTER JOIN, missing ranks default to 1000000
-  - Fixes short-query failures (e.g. "asbestos air sampling" now returns asbestos labs, not generic air sampling)
-- **API endpoints**:
-  - `GET /api/search?q=...&limit=&region=` — hybrid search
-  - `POST /api/match` — multi-capability matching (find labs covering multiple needs)
-  - `GET /api/labs/{lab_id}` — full lab details + all capabilities
-  - `GET /health` — health check
-- **MCP tools** (at `/mcp`):
-  - `search_lab_capabilities(query, limit, region)`
-  - `get_lab(lab_id)`
-  - `find_labs_for_multiple_tests(queries[], limit, region)`
-  - API key auth via `LABS_MCP_API_KEYS` env var (comma-separated, empty = open)
+1. User submits query via advisor UI
+2. Backend in parallel: embed query → search lab_fraglets + search standards + geocode location
+3. GPT-5.4-mini receives: query + top 3 standards (ref+title+scope) + top 20 labs (brief+tags)
+4. LLM returns JSON: `{standards_advice, key_standards, groups[{heading, explanation, lab_ids}]}`
+5. If key_standards identified: cross-reference against capabilities table (`find_labs_by_standard` RPC)
+6. Confirmed labs added as top group, even if not in original search results
+7. Frontend renders: standards guidance panel → grouped lab cards interleaved with explanations
 
-## Scraper pipeline
+## Search RPCs (Supabase)
 
-1. `scraper/fetch_orgs.py` — Fetch org records from UKAS REST API
-2. `scraper/fetch_schedules.py` — Discover schedule PDF URLs from media API
-3. `scraper/parse_schedule.py` — Parse schedule PDFs into structured capability JSON
-4. `scraper/batch_download.py` — Batch download + parse all PDFs, resumable
-5. `scraper/generate_embeddings.py` — Batch-embed capabilities (resumable, 100/batch)
-6. `scraper/search.py` — Legacy CLI search (pure vector, superseded by hybrid)
+- `hybrid_search_capabilities(query_text, query_embedding, match_count, filter_region)` — capabilities search
+- `hybrid_search_lab_fraglets(query_text, query_embedding, match_count, filter_region)` — fraglet search, returns lat/lng + matched_sites
+- `search_standards(query_text, query_embedding, match_count)` — standards search
+- `find_labs_by_standard(standard_ref)` — ILIKE match on capabilities.standards
+- `haversine_km(lat1, lng1, lat2, lng2)` — distance calculation
+
+All search RPCs check `lab_sites.address` in addition to `labs.address` for region filtering.
+
+## API endpoints
+
+- `GET /api/search?q=...&limit=&region=` — capabilities search
+- `GET /api/search/labs?q=...&limit=&location=&recommend=true` — advisor search with recommendations
+- `POST /api/match` — multi-capability matching
+- `GET /api/labs/{lab_id}` — lab detail + capabilities + fraglet + sites + PDF links
+- `GET /health` — health check
+
+## Lab fraglet generation
+
+- 1,210/1,524 done. 314 remaining (bulk 1-14 caps, heavy 15-99, monster 100+)
+- 5 Sonnet agents × 25 labs per round = 125 labs/round
+- Batching by capability count — see `feedback_fraglet_agent_batching.md`
+- Use $frag$ dollar-quoting for SQL inserts
+- After insert: run `python -m scraper.embed_fraglets` to embed new fraglets
+
+## IP protection
+
+- Lab detail page shows `brief` + structured `additional` capabilities + UKAS PDF links
+- Full `detail` field (generated prose) is NOT exposed to users — used only for search ranking via embeddings
+- Recommendation prompt uses brief + tags, not detail
+
+## Key notes
+
+- GPT-5.4-mini requires `max_completion_tokens` (not `max_tokens`) — 400 error otherwise
+- Calibration schedules have different column structure (Range | Expanded Uncertainty instead of Standards)
+- 88 multi-site labs: addresses were misclassified as capabilities, now in `lab_sites` table with site_code
+- schedule_pdfs.json URLs stored in labs.schedule_pdfs JSONB (not predictable URL pattern)
+- UKAS data is public; BHB v William Hill precedent favours factual data reuse
 
 ## Commands
 
 ```bash
-# Development
 source venv/bin/activate
-uvicorn app.main:app --reload --port 8000
-
-# Production (Render)
-gunicorn asgi:app -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
-
-# Scraper pipeline
-python scraper/fetch_orgs.py
-python scraper/fetch_schedules.py
-python scraper/batch_download.py
-python scraper/generate_embeddings.py
+uvicorn app.main:app --reload --port 8000          # Dev
+python -m scraper.embed_fraglets                     # Embed new fraglets
+python -m scraper.embed_standards                    # Embed standards (resumable)
+python -m scraper.scrape_astm                        # Scrape ASTM (resumable)
+python -m scraper.load_astm_standards                # Load ASTM into Supabase
 ```
-
-## Deployment
-
-- **Hosting**: Render (render.yaml), single web service
-- **Env vars**: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `OPENAI_API_KEY`, `LABS_MCP_API_KEYS`
-- **Start command**: `gunicorn asgi:app -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT`
-
-## Key findings
-
-- UKAS WP REST API is public and unauthenticated
-- Testing schedules: 3 columns (Materials/Products | Test Type/Range | Standards)
-- Calibration schedules differ (Measured Quantity | Range | Expanded Uncertainty)
-- robots.txt permits API access; BHB v William Hill precedent favours data reuse
-- Parser QA'd on 10 random samples — accuracy verified
-
-## Next steps
-
-- Normalise capability data (clean section numbers, standardise test method refs)
-- AI enrichment: generate searchable descriptions per capability
-- Pick domain name (candidates: LabScope, ScopeSearch, TestFind)
-- Market research saved at `data/market_research.md`
-- Full project plan at `data/project_plan.md`
