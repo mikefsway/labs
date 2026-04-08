@@ -1,7 +1,11 @@
 """
 LLM recommendation layer — takes search results and generates
-a structured, query-specific recommendation using GPT-4.1-mini.
+a structured, query-specific recommendation using GPT-5.4-mini.
+
+Returns JSON groups that the frontend can interleave with result cards.
 """
+
+import json
 
 from openai import AsyncOpenAI
 
@@ -12,14 +16,13 @@ RECOMMENDATION_MODEL = "gpt-5.4-mini"
 
 async def generate_recommendation(
     query: str, results: list[dict], mode: str = "labs"
-) -> str:
+) -> list[dict] | None:
     if not results:
-        return ""
+        return None
 
     settings = get_settings()
     client = AsyncOpenAI(api_key=settings.openai_api_key)
 
-    # Build context from results
     if mode == "labs":
         results_text = _format_lab_results(results)
     else:
@@ -38,30 +41,41 @@ Here are the top {len(results)} matching labs with their capabilities and releva
 
 Score range: {top_score:.4f} (highest) to {bottom_score:.4f} (lowest)
 
-Based on these results, provide a concise recommendation. Adapt your response to the situation:
+Return a JSON array of groups. Each group has:
+- "heading": a short bold heading (e.g. "Confirmed match", "Likely match", "Widely available")
+- "explanation": 1-3 sentences explaining this group — why these labs match (or partially match) the query
+- "lab_ids": array of lab_id integers that belong in this group
 
-- If this is widely available testing (many strong matches with similar capabilities), say so briefly. Note it's a common/standardised test, suggest choosing based on location and turnaround. List lab names grouped by region if helpful.
-- If this is specialist testing (few matches, varying relevance), group labs into "Confirmed match" (capabilities clearly cover the query) and "Likely match" (related capabilities, user should confirm). Briefly explain why each group matches or partially matches.
-- If matches are weak or tangential, advise what testing standards they might actually need and suggest contacting the closest matches to discuss.
+Adapt the grouping to the situation:
+- If this is widely available testing (many strong matches), use a single group with heading like "Widely available" and explain it's a common test, suggest choosing by location/turnaround.
+- If this is specialist testing, split into "Confirmed match" (capabilities clearly cover the query) and "Likely match" (related but user should confirm). Explain the difference.
+- If matches are weak, use a group like "Possible match — contact to confirm" and advise what standards they might need.
+- You may omit labs that are clearly irrelevant — not every lab needs to be in a group.
 
 Rules:
-- Be concise — aim for 3-8 sentences plus lab names.
-- Do NOT describe the labs in detail — describe how well they match the query.
-- Do NOT reveal that you are an AI or mention scores/algorithms.
+- Return ONLY valid JSON — no markdown, no explanation outside the JSON.
 - Use plain language a non-specialist can understand, but include relevant standard references where they add value.
-- Format using markdown: use **bold** for group headings, bullet points for lab lists."""
+- Do NOT describe individual labs — describe how the group relates to the query.
+- Do NOT reveal that you are an AI or mention scores/algorithms.
+- Keep explanations concise."""
 
     try:
         response = await client.chat.completions.create(
             model=RECOMMENDATION_MODEL,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
-            max_completion_tokens=600,
+            max_completion_tokens=800,
         )
-        return response.choices[0].message.content
+        text = response.choices[0].message.content.strip()
+        # Strip markdown code fences if present
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1]
+            if text.endswith("```"):
+                text = text[:-3]
+        return json.loads(text)
     except Exception as e:
         print(f"Recommendation error: {e}")
-        return ""
+        return None
 
 
 def _format_lab_results(results: list[dict]) -> str:
@@ -69,7 +83,7 @@ def _format_lab_results(results: list[dict]) -> str:
     for i, r in enumerate(results, 1):
         tags = ", ".join(r.get("tags", [])[:8]) if r.get("tags") else ""
         lines.append(
-            f"{i}. {r.get('title', r.get('lab_name', ''))}\n"
+            f"{i}. lab_id={r.get('lab_id')} — {r.get('title', r.get('lab_name', ''))}\n"
             f"   Address: {r.get('address', '')}\n"
             f"   Brief: {r.get('brief', '')}\n"
             f"   Tags: {tags}\n"
@@ -82,7 +96,7 @@ def _format_capability_results(results: list[dict]) -> str:
     lines = []
     for i, r in enumerate(results, 1):
         lines.append(
-            f"{i}. {r.get('lab_name', '')} (UKAS #{r.get('accreditation_number', '')})\n"
+            f"{i}. lab_id={r.get('lab_id')} — {r.get('lab_name', '')} (UKAS #{r.get('accreditation_number', '')})\n"
             f"   Address: {r.get('address', '')}\n"
             f"   Materials: {r.get('materials_products', '')}\n"
             f"   Test type: {r.get('test_type', '')}\n"

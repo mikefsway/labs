@@ -41,8 +41,6 @@
     if (params.get("q")) {
         searchInput.value = params.get("q");
         if (params.get("region")) regionFilter.value = params.get("region");
-        submitSearch = true;
-        doSearch();
     }
 
     // Form submit (button click or Enter)
@@ -124,25 +122,61 @@
             countValue.textContent = data.count;
             resultCount.classList.remove("hidden");
 
-            // Recommendation panel
-            if (data.recommendation) {
-                const recPanel = el("div", "recommendation-panel mb-6 p-5 rounded-xl border border-accent/20 bg-accent/5");
-                const recLabel = el("div", "font-mono text-[10px] text-accent tracking-widest uppercase mb-3");
-                recLabel.textContent = "Recommendation";
-                recPanel.appendChild(recLabel);
-                const recBody = el("div", "text-sm text-slate-300 leading-relaxed recommendation-body");
-                renderMarkdownLight(recBody, data.recommendation);
-                recPanel.appendChild(recBody);
-                resultsDiv.appendChild(recPanel);
-            }
-
             const maxRrf = data.results[0].rrf_score || 1;
-            data.results.forEach((r, idx) => {
-                const card = searchMode === "labs"
-                    ? buildLabCard(r, maxRrf, idx)
-                    : buildResultCard(r, maxRrf, idx);
-                resultsDiv.appendChild(card);
-            });
+
+            // Interleaved recommendation groups + cards
+            if (data.recommendation && Array.isArray(data.recommendation) && data.recommendation.length > 0) {
+                const groupedLabIds = new Set();
+                let cardIdx = 0;
+
+                data.recommendation.forEach((group) => {
+                    // Group heading + explanation
+                    const groupPanel = el("div", "mb-2 mt-6 first:mt-0");
+                    const heading = el("h3", "font-display font-semibold text-accent text-sm mb-1");
+                    heading.textContent = group.heading || "";
+                    groupPanel.appendChild(heading);
+                    const explanation = el("p", "text-sm text-slate-400 leading-relaxed mb-3");
+                    explanation.textContent = group.explanation || "";
+                    groupPanel.appendChild(explanation);
+                    resultsDiv.appendChild(groupPanel);
+
+                    // Cards for labs in this group
+                    const labIds = new Set((group.lab_ids || []).map(Number));
+                    data.results.forEach((r) => {
+                        if (labIds.has(r.lab_id) && !groupedLabIds.has(r.lab_id)) {
+                            groupedLabIds.add(r.lab_id);
+                            const card = searchMode === "labs"
+                                ? buildLabCard(r, maxRrf, cardIdx++)
+                                : buildResultCard(r, maxRrf, cardIdx++);
+                            resultsDiv.appendChild(card);
+                        }
+                    });
+                });
+
+                // Any remaining results not in a group
+                const remaining = data.results.filter((r) => !groupedLabIds.has(r.lab_id));
+                if (remaining.length > 0) {
+                    const otherPanel = el("div", "mb-2 mt-6");
+                    const otherHeading = el("h3", "font-display font-semibold text-slate-500 text-sm mb-3");
+                    otherHeading.textContent = "Other results";
+                    otherPanel.appendChild(otherHeading);
+                    resultsDiv.appendChild(otherPanel);
+                    remaining.forEach((r) => {
+                        const card = searchMode === "labs"
+                            ? buildLabCard(r, maxRrf, cardIdx++)
+                            : buildResultCard(r, maxRrf, cardIdx++);
+                        resultsDiv.appendChild(card);
+                    });
+                }
+            } else {
+                // No recommendation — just show cards
+                data.results.forEach((r, idx) => {
+                    const card = searchMode === "labs"
+                        ? buildLabCard(r, maxRrf, idx)
+                        : buildResultCard(r, maxRrf, idx);
+                    resultsDiv.appendChild(card);
+                });
+            }
         } catch (err) {
             statusDiv.classList.add("hidden");
             if (searchBtn) searchBtn.classList.remove("search-btn-loading");
