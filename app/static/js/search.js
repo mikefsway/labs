@@ -21,7 +21,6 @@
 
     let debounceTimer = null;
     let searchMode = "labs"; // "labs" or "capabilities"
-    let submitSearch = false; // true when user explicitly submits (Enter/button)
 
     // Mode toggle
     const modeDiv = document.getElementById("search-mode");
@@ -32,7 +31,6 @@
             searchMode = btn.dataset.mode;
             modeDiv.querySelectorAll(".mode-btn").forEach((b) => b.classList.remove("mode-btn-active"));
             btn.classList.add("mode-btn-active");
-            if (searchInput.value.trim().length >= 2) doSearch();
         });
     }
 
@@ -47,18 +45,16 @@
     if (searchForm) {
         searchForm.addEventListener("submit", (e) => {
             e.preventDefault();
-            clearTimeout(debounceTimer);
-            submitSearch = true;
             doSearch();
         });
     }
 
-    // Auto-search on typing (debounced)
-    searchInput.addEventListener("input", () => {
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(doSearch, 600);
+    regionFilter.addEventListener("change", () => {
+        if (searchInput.value.trim().length >= 2) {
+            submitSearch = true;
+            doSearch();
+        }
     });
-    regionFilter.addEventListener("change", doSearch);
 
     // Example search pills
     if (exampleSearches) {
@@ -96,8 +92,7 @@
 
         try {
             const base = searchMode === "labs" ? "/api/search/labs" : "/api/search";
-            const recommend = (searchMode === "labs" && submitSearch) ? "&recommend=true" : "";
-            submitSearch = false;
+            const recommend = searchMode === "labs" ? "&recommend=true" : "";
             const apiUrl = base + "?q=" + encodeURIComponent(q) + "&limit=20" +
                 (region ? "&region=" + encodeURIComponent(region) : "") + recommend;
             const resp = await fetch(apiUrl);
