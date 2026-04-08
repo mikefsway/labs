@@ -20,6 +20,20 @@
     if (!searchInput) return;
 
     let debounceTimer = null;
+    let searchMode = "labs"; // "labs" or "capabilities"
+
+    // Mode toggle
+    const modeDiv = document.getElementById("search-mode");
+    if (modeDiv) {
+        modeDiv.addEventListener("click", (e) => {
+            const btn = e.target.closest("[data-mode]");
+            if (!btn) return;
+            searchMode = btn.dataset.mode;
+            modeDiv.querySelectorAll(".mode-btn").forEach((b) => b.classList.remove("mode-btn-active"));
+            btn.classList.add("mode-btn-active");
+            if (searchInput.value.trim().length >= 2) doSearch();
+        });
+    }
 
     // Restore from URL
     const params = new URLSearchParams(window.location.search);
@@ -80,7 +94,8 @@
         if (searchBtn) searchBtn.classList.add("search-btn-loading");
 
         try {
-            const apiUrl = "/api/search?q=" + encodeURIComponent(q) + "&limit=20" +
+            const base = searchMode === "labs" ? "/api/search/labs" : "/api/search";
+            const apiUrl = base + "?q=" + encodeURIComponent(q) + "&limit=20" +
                 (region ? "&region=" + encodeURIComponent(region) : "");
             const resp = await fetch(apiUrl);
             const data = await resp.json();
@@ -106,7 +121,9 @@
 
             const maxRrf = data.results[0].rrf_score || 1;
             data.results.forEach((r, idx) => {
-                const card = buildResultCard(r, maxRrf, idx);
+                const card = searchMode === "labs"
+                    ? buildLabCard(r, maxRrf, idx)
+                    : buildResultCard(r, maxRrf, idx);
                 resultsDiv.appendChild(card);
             });
         } catch (err) {
@@ -190,6 +207,74 @@
         return card;
     }
 
+    function buildLabCard(r, maxRrf, idx) {
+        const pct = Math.round(((r.rrf_score || 0) / maxRrf) * 100);
+
+        const card = document.createElement("a");
+        card.href = "/lab/" + r.lab_id;
+        card.className = "result-card result-enter";
+        card.style.animationDelay = (idx * 0.04) + "s";
+
+        // Top row: title + relevance
+        const top = el("div", "flex items-center justify-between gap-4 mb-2");
+
+        const nameWrap = el("div", "min-w-0 flex-1");
+        const name = el("h3", "font-display font-semibold text-white text-[15px] truncate");
+        name.textContent = r.title || r.lab_name || "";
+        const accred = el("span", "font-mono text-[11px] text-slate-500 tracking-wide");
+        accred.textContent = "UKAS #" + (r.accreditation_number || "");
+        nameWrap.appendChild(name);
+        nameWrap.appendChild(accred);
+
+        const meterWrap = el("div", "flex items-center gap-2 flex-shrink-0");
+        const meterLabel = el("span", "font-mono text-[10px] text-slate-600");
+        meterLabel.textContent = pct + "%";
+        const meter = el("div", "relevance-meter");
+        const meterFill = el("div", "relevance-meter-fill");
+        meterFill.style.width = pct + "%";
+        meter.appendChild(meterFill);
+        meterWrap.appendChild(meterLabel);
+        meterWrap.appendChild(meter);
+
+        top.appendChild(nameWrap);
+        top.appendChild(meterWrap);
+
+        // Brief
+        const brief = el("p", "text-sm text-slate-300 leading-relaxed mb-3");
+        brief.textContent = r.brief || "";
+
+        // Tags
+        const tagsWrap = el("div", "flex flex-wrap gap-1.5 mb-3");
+        if (r.tags) {
+            r.tags.slice(0, 8).forEach((t) => {
+                const pill = el("span", "tag-pill");
+                pill.textContent = t;
+                tagsWrap.appendChild(pill);
+            });
+        }
+
+        // Category + address footer
+        const footer = el("div", "flex items-center gap-3 text-xs text-slate-600");
+        if (r.category) {
+            const cat = el("span", "font-mono text-[10px] text-accent/70 uppercase tracking-wider");
+            cat.textContent = r.category;
+            footer.appendChild(cat);
+        }
+        const dot = el("span", "");
+        dot.textContent = "\u00B7";
+        footer.appendChild(dot);
+        const addr = el("span", "truncate");
+        addr.textContent = truncate(r.address || "", 60);
+        footer.appendChild(addr);
+
+        card.appendChild(top);
+        card.appendChild(brief);
+        if (r.tags && r.tags.length > 0) card.appendChild(tagsWrap);
+        card.appendChild(footer);
+
+        return card;
+    }
+
     // --- Lab Detail Page ---
 
     async function loadLabDetail(labId) {
@@ -264,6 +349,29 @@
             });
 
             header.appendChild(grid);
+
+            // Fraglet detail (if available)
+            if (data.fraglet) {
+                const fragDiv = el("div", "mb-10 p-6 rounded-xl border border-white/[0.06] bg-white/[0.02]");
+                const fragLabel = el("div", "font-mono text-[10px] text-accent tracking-widest uppercase mb-3");
+                fragLabel.textContent = "About this lab";
+                const fragText = el("p", "text-sm text-slate-300 leading-relaxed");
+                fragText.textContent = data.fraglet.detail;
+                fragDiv.appendChild(fragLabel);
+                fragDiv.appendChild(fragText);
+
+                if (data.fraglet.tags && data.fraglet.tags.length > 0) {
+                    const fragTags = el("div", "flex flex-wrap gap-1.5 mt-4");
+                    data.fraglet.tags.forEach((t) => {
+                        const pill = el("span", "tag-pill");
+                        pill.textContent = t;
+                        fragTags.appendChild(pill);
+                    });
+                    fragDiv.appendChild(fragTags);
+                }
+
+                header.appendChild(fragDiv);
+            }
 
             // Capabilities
             if (!caps || caps.length === 0) {

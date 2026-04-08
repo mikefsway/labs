@@ -19,6 +19,23 @@ async def search_capabilities(
     return result.data
 
 
+async def search_lab_fraglets(
+    query: str, limit: int = 10, region: str | None = None
+) -> list[dict]:
+    embedding = await generate_embedding(query)
+    client = get_supabase_client()
+    result = client.rpc(
+        "hybrid_search_lab_fraglets",
+        {
+            "query_text": query,
+            "query_embedding": embedding,
+            "match_count": limit,
+            "filter_region": region,
+        },
+    ).execute()
+    return result.data
+
+
 async def find_multi_capability_labs(
     queries: list[str], limit: int = 10, region: str | None = None
 ) -> list[dict]:

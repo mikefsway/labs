@@ -1,7 +1,11 @@
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
-from app.services.hybrid_search import find_multi_capability_labs, search_capabilities
+from app.services.hybrid_search import (
+    find_multi_capability_labs,
+    search_capabilities,
+    search_lab_fraglets,
+)
 
 router = APIRouter(prefix="/api", tags=["search"])
 
@@ -13,6 +17,16 @@ async def search(
     region: str | None = Query(None, description="Region filter (e.g. 'London')"),
 ):
     results = await search_capabilities(q, limit=limit, region=region)
+    return {"query": q, "count": len(results), "results": results}
+
+
+@router.get("/search/labs")
+async def search_labs(
+    q: str = Query(..., min_length=2, description="Search query"),
+    limit: int = Query(10, ge=1, le=50),
+    region: str | None = Query(None, description="Region filter (e.g. 'London')"),
+):
+    results = await search_lab_fraglets(q, limit=limit, region=region)
     return {"query": q, "count": len(results), "results": results}
 
 

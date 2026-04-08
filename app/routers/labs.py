@@ -18,4 +18,15 @@ async def get_lab(lab_id: int):
         .order("page")
         .execute()
     )
-    return {"lab": lab.data, "capabilities": caps.data}
+    fraglet = (
+        client.table("lab_fraglets")
+        .select("title, brief, detail, additional, category, tags")
+        .eq("lab_id", lab_id)
+        .maybe_single()
+        .execute()
+    )
+    return {
+        "lab": lab.data,
+        "capabilities": caps.data,
+        "fraglet": fraglet.data if fraglet else None,
+    }

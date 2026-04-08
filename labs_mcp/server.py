@@ -8,7 +8,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from mcp.server.fastmcp import FastMCP
 
-from app.services.hybrid_search import find_multi_capability_labs, search_capabilities
+from app.services.hybrid_search import (
+    find_multi_capability_labs,
+    search_capabilities,
+    search_lab_fraglets,
+)
 
 mcp = FastMCP(
     "ukas-lab-search",
@@ -51,6 +55,37 @@ async def search_lab_capabilities(
             f"{i}. **{r['lab_name']}** (UKAS #{r['accreditation_number']})\n"
             f"   Materials: {materials}\n"
             f"   Test: {test_type}\n"
+            f"   Address: {r.get('address', 'N/A')}\n"
+            f"   Lab ID: {r['lab_id']}\n"
+        )
+    return "\n".join(lines)
+
+
+@mcp.tool()
+async def search_labs(
+    query: str, limit: int = 10, region: str | None = None
+) -> str:
+    """Search for labs by overall capability profile.
+
+    Returns lab-level summaries with rich descriptions. Better for initial
+    discovery — use search_lab_capabilities for precise capability matching.
+
+    Args:
+        query: What kind of lab you need (e.g. "petrochemical testing", "NDT weld inspection")
+        limit: Maximum results (1-50, default 10)
+        region: Optional geographic filter
+    """
+    results = await search_lab_fraglets(query, limit=min(limit, 50), region=region)
+    if not results:
+        return "No matching labs found."
+
+    lines = [f"Found {len(results)} matching labs:\n"]
+    for i, r in enumerate(results, 1):
+        tags = ", ".join(r.get("tags") or [])
+        lines.append(
+            f"{i}. **{r.get('title') or r['lab_name']}** (UKAS #{r['accreditation_number']})\n"
+            f"   {r.get('brief', '')}\n"
+            f"   Tags: {tags}\n"
             f"   Address: {r.get('address', 'N/A')}\n"
             f"   Lab ID: {r['lab_id']}\n"
         )

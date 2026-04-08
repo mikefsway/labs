@@ -37,6 +37,10 @@
                 </button>
             </form>
             <div class="flex items-center gap-3 mt-3">
+                <div id="search-mode" class="flex rounded-lg border border-white/10 overflow-hidden">
+                    <button type="button" data-mode="labs" class="mode-btn mode-btn-active px-3 py-1.5 text-xs font-mono tracking-wide">Labs</button>
+                    <button type="button" data-mode="capabilities" class="mode-btn px-3 py-1.5 text-xs font-mono tracking-wide">Capabilities</button>
+                </div>
                 <select id="region-filter"
                     class="px-3 py-2 bg-white/[0.04] border border-white/10 rounded-lg text-sm text-slate-400 focus:outline-none focus:border-accent/50 transition-colors font-mono">
                     <option value="">All regions</option>
