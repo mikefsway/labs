@@ -1,4 +1,4 @@
-// LabScope — Search & Lab Detail Logic
+// LabCurate — Search & Lab Detail Logic
 (function () {
     // Lab detail page
     if (typeof LAB_ID !== "undefined") {

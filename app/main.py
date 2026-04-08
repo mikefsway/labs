@@ -7,7 +7,7 @@ from fastapi.templating import Jinja2Templates
 from app.config import get_settings
 from app.routers import labs, search
 
-app = FastAPI(title="UKAS Lab Search", version="0.1.0")
+app = FastAPI(title="LabCurate", version="0.1.0")
 
 
 @app.middleware("http")
@@ -31,7 +31,7 @@ async def basic_auth_middleware(request: Request, call_next):
     return Response(
         content="Authentication required",
         status_code=401,
-        headers={"WWW-Authenticate": 'Basic realm="LabScope"'},
+        headers={"WWW-Authenticate": 'Basic realm="LabCurate"'},
     )
 
 
