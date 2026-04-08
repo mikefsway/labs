@@ -9,7 +9,7 @@
     const searchInput = document.getElementById("search-input");
     const searchForm = document.getElementById("search-form");
     const searchBtn = document.getElementById("search-btn");
-    const regionFilter = document.getElementById("region-filter");
+    const locationInput = document.getElementById("location-input");
     const resultsDiv = document.getElementById("results");
     const statusDiv = document.getElementById("status");
     const resultCount = document.getElementById("result-count");
@@ -38,7 +38,9 @@
     const params = new URLSearchParams(window.location.search);
     if (params.get("q")) {
         searchInput.value = params.get("q");
-        if (params.get("region")) regionFilter.value = params.get("region");
+    }
+    if (params.get("location") && locationInput) {
+        locationInput.value = params.get("location");
     }
 
     // Form submit (button click or Enter)
@@ -49,12 +51,6 @@
         });
     }
 
-    regionFilter.addEventListener("change", () => {
-        if (searchInput.value.trim().length >= 2) {
-            submitSearch = true;
-            doSearch();
-        }
-    });
 
     // Example search pills
     if (exampleSearches) {
@@ -76,13 +72,13 @@
             return;
         }
 
-        const region = regionFilter.value;
+        const location = locationInput ? locationInput.value.trim() : "";
 
         // Update URL
         const url = new URL(window.location);
         url.searchParams.set("q", q);
-        if (region) url.searchParams.set("region", region);
-        else url.searchParams.delete("region");
+        if (location) url.searchParams.set("location", location);
+        else url.searchParams.delete("location");
         history.replaceState(null, "", url);
 
         // Loading state
@@ -93,8 +89,8 @@
         try {
             const base = searchMode === "labs" ? "/api/search/labs" : "/api/search";
             const recommend = searchMode === "labs" ? "&recommend=true" : "";
-            const apiUrl = base + "?q=" + encodeURIComponent(q) + "&limit=20" +
-                (region ? "&region=" + encodeURIComponent(region) : "") + recommend;
+            const locationParam = location ? "&location=" + encodeURIComponent(location) : "";
+            const apiUrl = base + "?q=" + encodeURIComponent(q) + "&limit=20" + locationParam + recommend;
             const resp = await fetch(apiUrl);
             const data = await resp.json();
 
@@ -347,6 +343,11 @@
             const cat = el("span", "font-mono text-[10px] text-accent/70 uppercase tracking-wider");
             cat.textContent = r.category;
             footer.appendChild(cat);
+        }
+        if (r.distance_km != null) {
+            const dist = el("span", "font-mono text-[11px] text-accent/80 font-semibold flex-shrink-0");
+            dist.textContent = r.distance_km < 1 ? "<1 km" : r.distance_km + " km";
+            footer.appendChild(dist);
         }
         const dot = el("span", "");
         dot.textContent = "\u00B7";

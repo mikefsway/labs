@@ -41,23 +41,10 @@
                     <button type="button" data-mode="labs" class="mode-btn mode-btn-active px-3 py-1.5 text-xs font-mono tracking-wide">Labs</button>
                     <button type="button" data-mode="capabilities" class="mode-btn px-3 py-1.5 text-xs font-mono tracking-wide">Capabilities</button>
                 </div>
-                <select id="region-filter"
-                    class="px-3 py-2 bg-white/[0.04] border border-white/10 rounded-lg text-sm text-slate-400 focus:outline-none focus:border-accent/50 transition-colors font-mono">
-                    <option value="">All regions</option>
-                    <option value="London">London</option>
-                    <option value="Manchester">Manchester</option>
-                    <option value="Birmingham">Birmingham</option>
-                    <option value="Leeds">Leeds</option>
-                    <option value="Bristol">Bristol</option>
-                    <option value="Glasgow">Glasgow</option>
-                    <option value="Edinburgh">Edinburgh</option>
-                    <option value="Cardiff">Cardiff</option>
-                    <option value="Belfast">Belfast</option>
-                    <option value="Sheffield">Sheffield</option>
-                    <option value="Cambridge">Cambridge</option>
-                    <option value="Nottingham">Nottingham</option>
-                    <option value="Southampton">Southampton</option>
-                </select>
+                <input id="location-input" type="text"
+                    placeholder="Postcode or town"
+                    class="px-3 py-2 w-40 bg-white/[0.04] border border-white/10 rounded-lg text-sm text-slate-400 placeholder:text-slate-600 focus:outline-none focus:border-accent/50 transition-colors font-mono"
+                    autocomplete="off" spellcheck="false">
                 <div id="result-count" class="text-xs font-mono text-slate-600 hidden">
                     <span id="count-value"></span> results
                 </div>
