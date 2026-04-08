@@ -43,11 +43,21 @@
         locationInput.value = params.get("location");
     }
 
-    // Form submit (button click or Enter)
+    // Form submit (button click)
     if (searchForm) {
         searchForm.addEventListener("submit", (e) => {
             e.preventDefault();
             doSearch();
+        });
+    }
+
+    // Enter in textarea submits (Shift+Enter for newline)
+    if (searchInput) {
+        searchInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                doSearch();
+            }
         });
     }
 

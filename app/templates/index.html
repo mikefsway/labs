@@ -1,54 +1,45 @@
 {% extends "base.html" %}
-{% block title %}LabScope — Find UKAS-accredited testing laboratories{% endblock %}
+{% block title %}LabScope — UKAS Testing Laboratory Advisor{% endblock %}
 {% block content %}
 
 <!-- Hero -->
 <div class="hero-grid relative overflow-hidden">
-    <div class="max-w-6xl mx-auto px-6 pt-20 pb-16">
+    <div class="max-w-4xl mx-auto px-6 pt-16 pb-12">
         <div class="max-w-3xl">
-            <p class="font-mono text-xs text-accent tracking-[0.2em] uppercase mb-4 hero-fade" style="animation-delay: 0.1s">Accredited Laboratory Search</p>
-            <h1 class="text-4xl sm:text-5xl font-display font-800 text-white leading-tight mb-4 hero-fade" style="animation-delay: 0.2s">
-                Find the right lab.<br>
-                <span class="text-slate-400">Fast.</span>
+            <p class="font-mono text-xs text-accent tracking-[0.2em] uppercase mb-4 hero-fade" style="animation-delay: 0.1s">Testing Laboratory Advisor</p>
+            <h1 class="text-3xl sm:text-4xl font-display font-800 text-white leading-tight mb-3 hero-fade" style="animation-delay: 0.2s">
+                What do you need tested?
             </h1>
-            <p class="text-lg text-slate-400 font-light mb-10 max-w-xl hero-fade" style="animation-delay: 0.3s">
-                Search across 14,000+ UKAS-accredited testing capabilities. Describe what you need in plain language.
+            <p class="text-base text-slate-400 font-light mb-8 max-w-xl hero-fade" style="animation-delay: 0.3s">
+                Describe your product, material, or testing requirement. We'll identify the relevant standards and find accredited labs that can help.
             </p>
         </div>
 
-        <!-- Search controls -->
+        <!-- Advisor input -->
         <div class="max-w-3xl hero-fade" style="animation-delay: 0.4s">
-            <form id="search-form" class="flex gap-2">
-                <div class="relative flex-1">
-                    <div class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500">
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                            <circle cx="9" cy="9" r="6" stroke="currentColor" stroke-width="1.5"/>
-                            <path d="M13.5 13.5L17 17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                        </svg>
-                    </div>
-                    <input id="search-input" type="text"
-                        placeholder="e.g. tensile testing of steel, asbestos air sampling"
-                        class="w-full pl-12 pr-4 py-4 bg-white/[0.04] border border-white/10 rounded-xl text-white text-lg placeholder:text-slate-600 focus:outline-none focus:border-accent/50 focus:bg-white/[0.06] transition-all font-body"
+            <form id="search-form">
+                <div class="relative">
+                    <textarea id="search-input"
+                        placeholder="e.g. I've developed a new building insulation material and need to get it certified for the UK market"
+                        rows="3"
+                        class="w-full px-5 py-4 bg-white/[0.04] border border-white/10 rounded-xl text-white text-base placeholder:text-slate-600 focus:outline-none focus:border-accent/50 focus:bg-white/[0.06] transition-all font-body resize-none leading-relaxed"
+                        autocomplete="off" spellcheck="false"></textarea>
+                </div>
+                <div class="flex items-center gap-3 mt-3">
+                    <button type="submit" id="search-btn"
+                        class="px-6 py-2.5 bg-accent/90 hover:bg-accent text-white font-semibold rounded-lg transition-colors font-display text-sm tracking-wide flex-shrink-0">
+                        Find labs
+                    </button>
+                    <input id="location-input" type="text"
+                        placeholder="Your postcode or town (optional)"
+                        class="px-3 py-2.5 w-56 bg-white/[0.04] border border-white/10 rounded-lg text-sm text-slate-400 placeholder:text-slate-600 focus:outline-none focus:border-accent/50 transition-colors font-mono"
                         autocomplete="off" spellcheck="false">
+                    <div id="search-mode" class="flex rounded-lg border border-white/10 overflow-hidden ml-auto">
+                        <button type="button" data-mode="labs" class="mode-btn mode-btn-active px-3 py-1.5 text-xs font-mono tracking-wide">Advisor</button>
+                        <button type="button" data-mode="capabilities" class="mode-btn px-3 py-1.5 text-xs font-mono tracking-wide">Raw data</button>
+                    </div>
                 </div>
-                <button type="submit" id="search-btn"
-                    class="px-6 py-4 bg-accent/90 hover:bg-accent text-white font-semibold rounded-xl transition-colors font-display text-sm tracking-wide flex-shrink-0">
-                    Search
-                </button>
             </form>
-            <div class="flex items-center gap-3 mt-3">
-                <div id="search-mode" class="flex rounded-lg border border-white/10 overflow-hidden">
-                    <button type="button" data-mode="labs" class="mode-btn mode-btn-active px-3 py-1.5 text-xs font-mono tracking-wide">Labs</button>
-                    <button type="button" data-mode="capabilities" class="mode-btn px-3 py-1.5 text-xs font-mono tracking-wide">Capabilities</button>
-                </div>
-                <input id="location-input" type="text"
-                    placeholder="Postcode or town"
-                    class="px-3 py-2 w-40 bg-white/[0.04] border border-white/10 rounded-lg text-sm text-slate-400 placeholder:text-slate-600 focus:outline-none focus:border-accent/50 transition-colors font-mono"
-                    autocomplete="off" spellcheck="false">
-                <div id="result-count" class="text-xs font-mono text-slate-600 hidden">
-                    <span id="count-value"></span> results
-                </div>
-            </div>
         </div>
     </div>
 </div>
@@ -57,108 +48,69 @@
 <div id="status" class="text-center py-6 hidden">
     <div class="inline-flex items-center gap-3 text-sm text-slate-500 font-mono">
         <span class="search-spinner"></span>
-        <span>Searching capabilities...</span>
+        <span>Analysing your requirements...</span>
     </div>
 </div>
 
+<!-- Result count (hidden until results) -->
+<div id="result-count" class="max-w-4xl mx-auto px-6 hidden">
+    <div class="text-xs font-mono text-slate-600 mb-3"><span id="count-value"></span> labs found</div>
+</div>
+
 <!-- Results -->
-<div class="max-w-6xl mx-auto px-6 pb-12">
+<div class="max-w-4xl mx-auto px-6 pb-12">
     <div id="results" class="space-y-3"></div>
 </div>
 
 <!-- About section (shown when no search active) -->
-<div id="about-section" class="max-w-6xl mx-auto px-6 pb-16">
+<div id="about-section" class="max-w-4xl mx-auto px-6 pb-16">
+
+    <!-- Example queries as conversation starters -->
+    <div class="max-w-3xl mb-12">
+        <h2 class="font-mono text-xs text-slate-500 tracking-widest uppercase mb-4">Try asking about</h2>
+        <div class="flex flex-wrap gap-2" id="example-searches">
+            <button class="example-pill" data-query="I need to test steel reinforcement bars for a construction project">steel rebar testing</button>
+            <button class="example-pill" data-query="We manufacture PPE gloves and need compliance testing for the UK market">PPE glove compliance</button>
+            <button class="example-pill" data-query="I need asbestos surveying for a building refurbishment in London">asbestos surveying</button>
+            <button class="example-pill" data-query="We need our drinking water tested for legionella and coliforms">water microbiology</button>
+            <button class="example-pill" data-query="Testing electromagnetic compatibility of an electronic medical device">EMC testing</button>
+            <button class="example-pill" data-query="I've developed a new food packaging material and need migration testing">food contact materials</button>
+            <button class="example-pill" data-query="We need noise assessments for planning permission on a new development">noise assessment</button>
+            <button class="example-pill" data-query="Calibration of pressure gauges and temperature sensors for our factory">instrument calibration</button>
+        </div>
+    </div>
 
     <!-- How it works -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
         <div class="p-6 rounded-xl border border-white/[0.06] bg-white/[0.02]">
-            <div class="font-mono text-accent text-xs tracking-widest uppercase mb-3">01 / Search</div>
-            <h3 class="font-display font-semibold text-white mb-2">Describe what you need</h3>
-            <p class="text-sm text-slate-400 leading-relaxed">Type a test, material, or standard in plain language. Our hybrid search combines keyword matching with semantic understanding to find relevant capabilities.</p>
+            <div class="font-mono text-accent text-xs tracking-widest uppercase mb-3">01 / Describe</div>
+            <h3 class="font-display font-semibold text-white mb-2">Tell us what you need</h3>
+            <p class="text-sm text-slate-400 leading-relaxed">Describe your product, material, or problem in plain language. You don't need to know the specific test or standard.</p>
         </div>
         <div class="p-6 rounded-xl border border-white/[0.06] bg-white/[0.02]">
-            <div class="font-mono text-accent text-xs tracking-widest uppercase mb-3">02 / Compare</div>
-            <h3 class="font-display font-semibold text-white mb-2">Review matched labs</h3>
-            <p class="text-sm text-slate-400 leading-relaxed">Results show the specific capability each lab is accredited for, with relevance ranking. Click through to see the full schedule of accreditation.</p>
+            <div class="font-mono text-accent text-xs tracking-widest uppercase mb-3">02 / Advise</div>
+            <h3 class="font-display font-semibold text-white mb-2">We identify what's needed</h3>
+            <p class="text-sm text-slate-400 leading-relaxed">We match your needs against 77,000 testing standards and 14,000 accredited capabilities to identify the right tests and labs.</p>
         </div>
         <div class="p-6 rounded-xl border border-white/[0.06] bg-white/[0.02]">
             <div class="font-mono text-accent text-xs tracking-widest uppercase mb-3">03 / Connect</div>
-            <h3 class="font-display font-semibold text-white mb-2">Contact the lab directly</h3>
-            <p class="text-sm text-slate-400 leading-relaxed">Each lab listing includes contact details, address, and a link to their official UKAS accreditation schedule for verification.</p>
+            <h3 class="font-display font-semibold text-white mb-2">Contact the right lab</h3>
+            <p class="text-sm text-slate-400 leading-relaxed">Each recommendation includes the lab's UKAS accreditation details, contact information, and distance from you.</p>
         </div>
     </div>
 
     <!-- What is this -->
-    <div class="max-w-3xl mx-auto mb-16">
-        <h2 class="font-display font-bold text-white text-2xl mb-4">What is this?</h2>
+    <div class="max-w-3xl mx-auto mb-12">
+        <h2 class="font-display font-bold text-white text-xl mb-3">About LabScope</h2>
         <div class="space-y-3 text-sm text-slate-400 leading-relaxed">
-            <p>LabScope searches across the accreditation schedules of 1,524 UKAS-accredited testing and calibration laboratories. These schedules define exactly what each lab is accredited to test, including the materials, test methods, and standards covered.</p>
-            <p>Until now, this data was locked inside individual PDF documents on the UKAS website. Finding a lab for a specific test meant opening schedules one by one, or relying on word of mouth. LabScope makes all 14,298 capabilities searchable in one place.</p>
-            <p>Search uses a hybrid approach: full-text keyword matching (so "BS 4449" finds labs accredited to that standard) combined with semantic vector search (so "will this weld hold?" finds tensile and fatigue testing labs). Results are ranked using Reciprocal Rank Fusion to give you the best of both.</p>
-        </div>
-    </div>
-
-    <!-- Example searches -->
-    <div class="max-w-3xl mx-auto mb-16">
-        <h2 class="font-display font-bold text-white text-2xl mb-4">Try these searches</h2>
-        <div class="flex flex-wrap gap-2" id="example-searches">
-            <button class="example-pill" data-query="tensile testing of steel">tensile testing of steel</button>
-            <button class="example-pill" data-query="asbestos air sampling">asbestos air sampling</button>
-            <button class="example-pill" data-query="pressure gauge calibration">pressure gauge calibration</button>
-            <button class="example-pill" data-query="microbiological testing of water">microbiological testing of water</button>
-            <button class="example-pill" data-query="EMC testing electronics">EMC testing electronics</button>
-            <button class="example-pill" data-query="food safety chemical analysis">food safety chemical analysis</button>
-            <button class="example-pill" data-query="concrete compressive strength">concrete compressive strength</button>
-            <button class="example-pill" data-query="noise measurement workplace">noise measurement workplace</button>
-        </div>
-    </div>
-
-    <!-- API & MCP -->
-    <div class="max-w-3xl mx-auto mb-16">
-        <h2 class="font-display font-bold text-white text-2xl mb-4">API &amp; AI Agent Access</h2>
-        <div class="space-y-3 text-sm text-slate-400 leading-relaxed mb-6">
-            <p>LabScope exposes a REST API and an MCP (Model Context Protocol) server, so AI agents and applications can search lab capabilities programmatically.</p>
-        </div>
-
-        <div class="space-y-4">
-            <!-- REST API -->
-            <div class="p-5 rounded-xl border border-white/[0.06] bg-white/[0.02]">
-                <div class="font-mono text-xs text-accent tracking-widest uppercase mb-3">REST API</div>
-                <div class="space-y-2 font-mono text-xs">
-                    <div class="flex gap-3">
-                        <span class="text-emerald-400 w-12 flex-shrink-0">GET</span>
-                        <span class="text-slate-300">/api/search?q=tensile+testing&amp;limit=10&amp;region=London</span>
-                    </div>
-                    <div class="flex gap-3">
-                        <span class="text-amber-400 w-12 flex-shrink-0">POST</span>
-                        <span class="text-slate-300">/api/match</span>
-                        <span class="text-slate-600">&#8212; find labs covering multiple test requirements</span>
-                    </div>
-                    <div class="flex gap-3">
-                        <span class="text-emerald-400 w-12 flex-shrink-0">GET</span>
-                        <span class="text-slate-300">/api/labs/{lab_id}</span>
-                        <span class="text-slate-600">&#8212; full lab details + all capabilities</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- MCP -->
-            <div class="p-5 rounded-xl border border-white/[0.06] bg-white/[0.02]">
-                <div class="font-mono text-xs text-accent tracking-widest uppercase mb-3">MCP Server</div>
-                <p class="text-sm text-slate-400 mb-3">Connect your AI agent to LabScope via the Model Context Protocol. The MCP endpoint is available at <span class="font-mono text-slate-300">/mcp</span> and provides three tools:</p>
-                <div class="space-y-2 font-mono text-xs text-slate-300">
-                    <div><span class="text-teal-400">search_lab_capabilities</span><span class="text-slate-600">(query, limit, region)</span></div>
-                    <div><span class="text-teal-400">get_lab</span><span class="text-slate-600">(lab_id)</span></div>
-                    <div><span class="text-teal-400">find_labs_for_multiple_tests</span><span class="text-slate-600">(queries[], limit, region)</span></div>
-                </div>
-            </div>
+            <p>LabScope searches across the accreditation schedules of 1,524 UKAS-accredited testing and calibration laboratories, covering 14,298 individual capabilities. We match your requirements against 77,000 international testing standards to advise on what testing you need and who can do it.</p>
         </div>
     </div>
 
     <!-- Data source -->
     <div class="max-w-3xl mx-auto">
         <div class="p-5 rounded-xl border border-white/[0.06] bg-white/[0.02] text-sm text-slate-500 leading-relaxed">
-            <strong class="text-slate-400">Data source:</strong> All capability data is extracted from publicly available UKAS (United Kingdom Accreditation Service) accreditation schedules. UKAS is appointed by the UK government as the national accreditation body. Lab accreditation status should always be verified against the official UKAS directory at ukas.com before making procurement decisions.
+            <strong class="text-slate-400">Data source:</strong> Capability data is extracted from publicly available UKAS accreditation schedules. Standards data from ISO Open Data. Lab accreditation status should always be verified at ukas.com.
         </div>
     </div>
 
