@@ -43,7 +43,7 @@ Return JSON: {{"standards_advice": string|null, "key_standards": [string]|null, 
 
 standards_advice: if the query is about a product/problem (not a specific test), briefly note which standards apply (2 sentences max). Null if query already names a standard.
 key_standards: array of the 1-3 most relevant standard reference codes you identified (e.g. ["ISO 7173", "BS EN 1021-1"]). Null if none identified. Use the short reference form without year.
-groups: categorise labs. Omit labs whose tags/title show a clearly different application domain (e.g. a medical implant lab is irrelevant for furniture, an aerospace lab is irrelevant for food). Be strict about application relevance, not just material overlap. Explain match quality per group. Be concise."""
+groups: categorise labs into groups. IMPORTANT: Before including any lab, check its tags and title for domain-specific terms. DROP any lab serving a clearly wrong industry — e.g. "medical-implants" is wrong for furniture, "aircraft-interior" is wrong for food, "veterinary" is wrong for construction. Material overlap alone (e.g. both test "plastics") is NOT enough — the application must be relevant. Explain match quality per group. Be concise."""
 
     try:
         response = await client.chat.completions.create(
