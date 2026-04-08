@@ -156,7 +156,7 @@
                     groupPanel.appendChild(explanation);
                     resultsDiv.appendChild(groupPanel);
 
-                    // Cards for labs in this group
+                    // Cards for labs in this group (from search results)
                     const labIds = new Set((group.lab_ids || []).map(Number));
                     data.results.forEach((r) => {
                         if (labIds.has(r.lab_id) && !groupedLabIds.has(r.lab_id)) {
@@ -167,6 +167,18 @@
                             resultsDiv.appendChild(card);
                         }
                     });
+
+                    // Extra labs confirmed by standard cross-reference
+                    const extraIds = new Set((group.extra_lab_ids || []).map(Number));
+                    if (extraIds.size > 0 && data.extra_results) {
+                        data.extra_results.forEach((r) => {
+                            if (extraIds.has(r.lab_id) && !groupedLabIds.has(r.lab_id)) {
+                                groupedLabIds.add(r.lab_id);
+                                const card = buildLabCard(r, maxRrf, cardIdx++);
+                                resultsDiv.appendChild(card);
+                            }
+                        });
+                    }
                 });
 
                 // Any remaining results not in a group

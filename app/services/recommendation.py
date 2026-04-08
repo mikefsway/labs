@@ -1,6 +1,10 @@
 """
 LLM recommendation layer — takes search results + relevant standards
 and generates a structured, query-specific recommendation using GPT-5.4-mini.
+
+Two-phase approach:
+1. LLM identifies relevant standards and groups labs
+2. If standards identified, cross-reference against capabilities for confirmed matches
 """
 
 import json
@@ -8,6 +12,7 @@ import json
 from openai import AsyncOpenAI
 
 from app.config import get_settings
+from app.database import get_supabase_client
 
 RECOMMENDATION_MODEL = "gpt-5.4-mini"
 
@@ -34,10 +39,11 @@ Query: "{query}"
 Matching labs:
 {results_text}
 
-Return JSON: {{"standards_advice": string|null, "groups": [{{"heading": string, "explanation": string, "lab_ids": [int]}}]}}
+Return JSON: {{"standards_advice": string|null, "key_standards": [string]|null, "groups": [{{"heading": string, "explanation": string, "lab_ids": [int]}}]}}
 
 standards_advice: if the query is about a product/problem (not a specific test), briefly note which standards apply (2 sentences max). Null if query already names a standard.
-groups: categorise labs as "Confirmed match", "Likely match", or "Widely available". Omit irrelevant labs. Explain match quality per group, not per lab. Be concise."""
+key_standards: array of the 1-3 most relevant standard reference codes you identified (e.g. ["ISO 7173", "BS EN 1021-1"]). Null if none identified. Use the short reference form without year.
+groups: categorise labs. Omit labs whose tags/title show a clearly different application domain (e.g. a medical implant lab is irrelevant for furniture, an aerospace lab is irrelevant for food). Be strict about application relevance, not just material overlap. Explain match quality per group. Be concise."""
 
     try:
         response = await client.chat.completions.create(
@@ -51,10 +57,62 @@ groups: categorise labs as "Confirmed match", "Likely match", or "Widely availab
             text = text.split("\n", 1)[1]
             if text.endswith("```"):
                 text = text[:-3]
-        return json.loads(text)
+        rec = json.loads(text)
+
+        # Phase 2: if key standards identified, find labs that explicitly list them
+        key_stds = rec.get("key_standards")
+        if key_stds:
+            confirmed_ids = await _find_labs_with_standards(key_stds)
+            if confirmed_ids:
+                # Add or merge a "Confirmed — accredited for this standard" group
+                existing_grouped = set()
+                for g in rec.get("groups", []):
+                    existing_grouped.update(g.get("lab_ids", []))
+
+                # Only include confirmed labs that are in our result set
+                result_lab_ids = {r.get("lab_id") for r in results}
+                confirmed_in_results = [lid for lid in confirmed_ids if lid in result_lab_ids]
+
+                # Also check for confirmed labs NOT in search results
+                confirmed_not_in_results = [lid for lid in confirmed_ids if lid not in result_lab_ids]
+
+                if confirmed_in_results or confirmed_not_in_results:
+                    std_names = ", ".join(key_stds)
+                    confirmed_group = {
+                        "heading": f"Accredited for {std_names}",
+                        "explanation": f"These labs are specifically UKAS-accredited to test against {std_names}.",
+                        "lab_ids": confirmed_in_results,
+                    }
+                    if confirmed_not_in_results:
+                        confirmed_group["extra_lab_ids"] = confirmed_not_in_results
+                    # Insert as first group
+                    rec["groups"].insert(0, confirmed_group)
+                    # Remove these labs from other groups to avoid duplication
+                    confirmed_set = set(confirmed_in_results)
+                    for g in rec["groups"][1:]:
+                        g["lab_ids"] = [lid for lid in g.get("lab_ids", []) if lid not in confirmed_set]
+                    # Remove empty groups
+                    rec["groups"] = [g for g in rec["groups"] if g.get("lab_ids") or g.get("extra_lab_ids")]
+
+        return rec
     except Exception as e:
         print(f"Recommendation error: {e}")
         return None
+
+
+async def _find_labs_with_standards(standard_refs: list[str]) -> list[int]:
+    """Find lab_ids that have capabilities explicitly listing these standards."""
+    db = get_supabase_client()
+    lab_ids = set()
+    for ref in standard_refs:
+        # Strip "ISO " or "BS EN " prefix variations for flexible matching
+        # Search for the numeric part which is most distinctive
+        search_term = ref.strip()
+        result = db.rpc("find_labs_by_standard", {"standard_ref": search_term}).execute()
+        if result.data:
+            for row in result.data:
+                lab_ids.add(row["lab_id"])
+    return list(lab_ids)
 
 
 def _format_results(results: list[dict], mode: str) -> str:
