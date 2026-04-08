@@ -25,8 +25,16 @@ async def get_lab(lab_id: int):
         .maybe_single()
         .execute()
     )
+    sites = (
+        client.table("lab_sites")
+        .select("site_name, address, postcode, capabilities_summary, is_testing_site, site_code")
+        .eq("lab_id", lab_id)
+        .order("is_testing_site", desc=True)
+        .execute()
+    )
     return {
         "lab": lab.data,
         "capabilities": caps.data,
         "fraglet": fraglet.data if fraglet else None,
+        "sites": sites.data if sites else [],
     }

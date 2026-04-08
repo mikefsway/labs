@@ -253,6 +253,33 @@
             });
         }
 
+        // Matched sites (when region filter matched via a branch/site)
+        if (r.matched_sites && r.matched_sites.length > 0) {
+            const sitesWrap = el("div", "mb-3 p-3 rounded-lg border border-accent/20 bg-accent/5");
+            const sitesLabel = el("div", "font-mono text-[10px] text-accent tracking-widest uppercase mb-2");
+            sitesLabel.textContent = "Matched sites";
+            sitesWrap.appendChild(sitesLabel);
+            r.matched_sites.forEach((s) => {
+                const siteRow = el("div", "flex items-start gap-2 mb-1 last:mb-0");
+                const pin = el("span", "text-accent text-xs mt-0.5");
+                pin.textContent = "\u25CB";
+                const siteInfo = el("div", "text-xs text-slate-300");
+                const siteName = el("strong", "");
+                siteName.textContent = s.site_name || "";
+                siteInfo.appendChild(siteName);
+                siteInfo.appendChild(document.createTextNode(" — " + truncate(s.address || "", 60)));
+                if (s.capabilities) {
+                    const capSpan = el("span", "text-slate-500");
+                    capSpan.textContent = " (" + truncate(s.capabilities, 50) + ")";
+                    siteInfo.appendChild(capSpan);
+                }
+                siteRow.appendChild(pin);
+                siteRow.appendChild(siteInfo);
+                sitesWrap.appendChild(siteRow);
+            });
+            card.appendChild(sitesWrap);
+        }
+
         // Category + address footer
         const footer = el("div", "flex items-center gap-3 text-xs text-slate-600");
         if (r.category) {
@@ -371,6 +398,47 @@
                 }
 
                 header.appendChild(fragDiv);
+            }
+
+            // Sites
+            if (data.sites && data.sites.length > 0) {
+                const sitesDiv = el("div", "mb-10");
+                const sitesHeader = el("div", "flex items-center justify-between mb-4");
+                const sitesTitle = el("h2", "text-xl font-display font-semibold text-white");
+                sitesTitle.textContent = "Locations";
+                const sitesCount = el("span", "font-mono text-xs text-slate-500");
+                sitesCount.textContent = data.sites.length + " sites";
+                sitesHeader.appendChild(sitesTitle);
+                sitesHeader.appendChild(sitesCount);
+                sitesDiv.appendChild(sitesHeader);
+
+                const sitesGrid = el("div", "grid grid-cols-1 sm:grid-cols-2 gap-3");
+                data.sites.forEach((s) => {
+                    const siteCard = el("div", "p-4 rounded-xl border border-white/[0.06] bg-white/[0.02]");
+                    const sName = el("div", "font-semibold text-sm text-white mb-1");
+                    sName.textContent = s.site_name || "Site";
+                    siteCard.appendChild(sName);
+
+                    const sAddr = el("div", "text-xs text-slate-400 mb-2");
+                    sAddr.textContent = s.address || "";
+                    siteCard.appendChild(sAddr);
+
+                    if (s.capabilities_summary) {
+                        const sCap = el("div", "text-xs text-slate-300");
+                        sCap.textContent = s.capabilities_summary;
+                        siteCard.appendChild(sCap);
+                    }
+
+                    if (!s.is_testing_site) {
+                        const badge = el("span", "inline-block mt-2 font-mono text-[10px] text-slate-500 border border-slate-700 rounded px-1.5 py-0.5");
+                        badge.textContent = "ADMIN ONLY";
+                        siteCard.appendChild(badge);
+                    }
+
+                    sitesGrid.appendChild(siteCard);
+                });
+                sitesDiv.appendChild(sitesGrid);
+                header.appendChild(sitesDiv);
             }
 
             // Capabilities
