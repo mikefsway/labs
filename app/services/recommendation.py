@@ -119,8 +119,8 @@ def _format_results(results: list[dict], mode: str) -> str:
     lines = []
     for r in results:
         if mode == "labs":
-            tags = ", ".join(r.get("tags", [])[:6]) if r.get("tags") else ""
-            lines.append(f"- lab_id={r.get('lab_id')} {r.get('title', r.get('lab_name', ''))} [{tags}]")
+            brief = r.get("brief", "")
+            lines.append(f"- lab_id={r.get('lab_id')} {r.get('title', r.get('lab_name', ''))}: {brief}")
         else:
             lines.append(
                 f"- lab_id={r.get('lab_id')} {r.get('lab_name', '')} | "
