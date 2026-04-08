@@ -13,3 +13,5 @@ services:
         sync: false
       - key: LABS_MCP_API_KEYS
         sync: false
+      - key: SITE_PASSWORD
+        sync: false

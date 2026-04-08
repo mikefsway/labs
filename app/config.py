@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     supabase_service_key: str
     openai_api_key: str
     labs_mcp_api_keys: str = ""
+    site_password: str = ""
     debug: bool = False
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
