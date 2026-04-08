@@ -21,6 +21,7 @@
 
     let debounceTimer = null;
     let searchMode = "labs"; // "labs" or "capabilities"
+    let submitSearch = false; // true when user explicitly submits (Enter/button)
 
     // Mode toggle
     const modeDiv = document.getElementById("search-mode");
@@ -40,6 +41,7 @@
     if (params.get("q")) {
         searchInput.value = params.get("q");
         if (params.get("region")) regionFilter.value = params.get("region");
+        submitSearch = true;
         doSearch();
     }
 
@@ -48,6 +50,7 @@
         searchForm.addEventListener("submit", (e) => {
             e.preventDefault();
             clearTimeout(debounceTimer);
+            submitSearch = true;
             doSearch();
         });
     }
@@ -95,7 +98,8 @@
 
         try {
             const base = searchMode === "labs" ? "/api/search/labs" : "/api/search";
-            const recommend = searchMode === "labs" ? "&recommend=true" : "";
+            const recommend = (searchMode === "labs" && submitSearch) ? "&recommend=true" : "";
+            submitSearch = false;
             const apiUrl = base + "?q=" + encodeURIComponent(q) + "&limit=20" +
                 (region ? "&region=" + encodeURIComponent(region) : "") + recommend;
             const resp = await fetch(apiUrl);

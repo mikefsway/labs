@@ -51,13 +51,17 @@ Rules:
 - Use plain language a non-specialist can understand, but include relevant standard references where they add value.
 - Format using markdown: use **bold** for group headings, bullet points for lab lists."""
 
-    response = await client.chat.completions.create(
-        model=RECOMMENDATION_MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.3,
-        max_tokens=600,
-    )
-    return response.choices[0].message.content
+    try:
+        response = await client.chat.completions.create(
+            model=RECOMMENDATION_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            max_completion_tokens=600,
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        print(f"Recommendation error: {e}")
+        return ""
 
 
 def _format_lab_results(results: list[dict]) -> str:
