@@ -95,8 +95,9 @@
 
         try {
             const base = searchMode === "labs" ? "/api/search/labs" : "/api/search";
+            const recommend = searchMode === "labs" ? "&recommend=true" : "";
             const apiUrl = base + "?q=" + encodeURIComponent(q) + "&limit=20" +
-                (region ? "&region=" + encodeURIComponent(region) : "");
+                (region ? "&region=" + encodeURIComponent(region) : "") + recommend;
             const resp = await fetch(apiUrl);
             const data = await resp.json();
 
@@ -118,6 +119,18 @@
 
             countValue.textContent = data.count;
             resultCount.classList.remove("hidden");
+
+            // Recommendation panel
+            if (data.recommendation) {
+                const recPanel = el("div", "recommendation-panel mb-6 p-5 rounded-xl border border-accent/20 bg-accent/5");
+                const recLabel = el("div", "font-mono text-[10px] text-accent tracking-widest uppercase mb-3");
+                recLabel.textContent = "Recommendation";
+                recPanel.appendChild(recLabel);
+                const recBody = el("div", "text-sm text-slate-300 leading-relaxed recommendation-body");
+                renderMarkdownLight(recBody, data.recommendation);
+                recPanel.appendChild(recBody);
+                resultsDiv.appendChild(recPanel);
+            }
 
             const maxRrf = data.results[0].rrf_score || 1;
             data.results.forEach((r, idx) => {
@@ -510,6 +523,46 @@
         const e = document.createElement(tag);
         if (className) e.className = className;
         return e;
+    }
+
+    function renderMarkdownLight(container, text) {
+        // Simple markdown: **bold**, - bullets, paragraphs
+        const lines = text.split("\n");
+        let ul = null;
+        lines.forEach((line) => {
+            const trimmed = line.trim();
+            if (!trimmed) {
+                if (ul) { container.appendChild(ul); ul = null; }
+                return;
+            }
+            if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+                if (!ul) { ul = el("ul", "list-disc list-inside ml-2 mb-2 space-y-1"); }
+                const li = document.createElement("li");
+                applyBold(li, trimmed.slice(2));
+                ul.appendChild(li);
+            } else {
+                if (ul) { container.appendChild(ul); ul = null; }
+                const p = el("p", "mb-2");
+                applyBold(p, trimmed);
+                container.appendChild(p);
+            }
+        });
+        if (ul) container.appendChild(ul);
+    }
+
+    function applyBold(parent, text) {
+        // Split on **...**  and create <strong> elements
+        const parts = text.split(/\*\*(.*?)\*\*/g);
+        parts.forEach((part, i) => {
+            if (i % 2 === 1) {
+                const strong = document.createElement("strong");
+                strong.className = "text-white";
+                strong.textContent = part;
+                parent.appendChild(strong);
+            } else if (part) {
+                parent.appendChild(document.createTextNode(part));
+            }
+        });
     }
 
     function truncate(s, n) {
