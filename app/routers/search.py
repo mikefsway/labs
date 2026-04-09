@@ -12,6 +12,7 @@ from app.services.hybrid_search import (
     search_lab_fraglets,
     search_standards,
 )
+from app.services.clarify import maybe_clarify
 from app.services.recommendation import generate_recommendation
 
 router = APIRouter(prefix="/api", tags=["search"])
@@ -46,6 +47,17 @@ async def search(
 ):
     results = await search_capabilities(q, limit=limit, region=region)
     return {"query": q, "count": len(results), "results": results}
+
+
+@router.get("/search/clarify")
+async def clarify(
+    q: str = Query(..., min_length=2, description="User query to check"),
+):
+    """Check if a query needs clarifying questions before searching."""
+    result = await maybe_clarify(q)
+    if result:
+        return {"needs_clarification": True, **result}
+    return {"needs_clarification": False}
 
 
 @router.get("/search/labs")

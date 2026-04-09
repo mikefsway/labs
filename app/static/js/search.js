@@ -21,6 +21,7 @@
 
     let debounceTimer = null;
     let searchMode = "labs"; // "labs" or "capabilities"
+    let skipClarify = false; // set true after clarification or when query is specific
 
     // Mode toggle
     const modeDiv = document.getElementById("search-mode");
@@ -72,8 +73,8 @@
         });
     }
 
-    async function doSearch() {
-        const q = searchInput.value.trim();
+    async function doSearch(enrichedQuery) {
+        const q = enrichedQuery || searchInput.value.trim();
         if (q.length < 2) {
             resultsDiv.textContent = "";
             statusDiv.classList.add("hidden");
@@ -86,21 +87,50 @@
 
         // Update URL
         const url = new URL(window.location);
-        url.searchParams.set("q", q);
+        url.searchParams.set("q", searchInput.value.trim());
         if (location) url.searchParams.set("location", location);
         else url.searchParams.delete("location");
         history.replaceState(null, "", url);
 
+        // Clarification step (only for Advisor mode, skip if already clarified or enriched)
+        if (searchMode === "labs" && !skipClarify && !enrichedQuery) {
+            if (aboutSection) aboutSection.classList.add("hidden");
+            statusDiv.classList.remove("hidden");
+            const statusText = statusDiv.querySelector("span:last-child");
+            if (statusText) statusText.textContent = "Understanding your query...";
+            if (searchBtn) searchBtn.classList.add("search-btn-loading");
+
+            try {
+                const clarifyResp = await fetch("/api/search/clarify?q=" + encodeURIComponent(q));
+                const clarifyData = await clarifyResp.json();
+
+                if (clarifyData.needs_clarification && clarifyData.questions) {
+                    statusDiv.classList.add("hidden");
+                    if (searchBtn) searchBtn.classList.remove("search-btn-loading");
+                    showClarification(q, clarifyData.questions);
+                    return;
+                }
+            } catch (e) {
+                // Clarification failed — proceed with search anyway
+            }
+            if (statusText) statusText.textContent = "Analysing your requirements...";
+        }
+
+        skipClarify = false;
+
         // Loading state
         statusDiv.classList.remove("hidden");
+        const statusText2 = statusDiv.querySelector("span:last-child");
+        if (statusText2) statusText2.textContent = "Analysing your requirements...";
         resultCount.classList.add("hidden");
         if (searchBtn) searchBtn.classList.add("search-btn-loading");
 
         try {
+            const searchQuery = enrichedQuery || q;
             const base = searchMode === "labs" ? "/api/search/labs" : "/api/search";
             const recommend = searchMode === "labs" ? "&recommend=true" : "";
             const locationParam = location ? "&location=" + encodeURIComponent(location) : "";
-            const apiUrl = base + "?q=" + encodeURIComponent(q) + "&limit=20" + locationParam + recommend;
+            const apiUrl = base + "?q=" + encodeURIComponent(searchQuery) + "&limit=20" + locationParam + recommend;
             const resp = await fetch(apiUrl);
             const data = await resp.json();
 
@@ -139,6 +169,12 @@
                     const adviceText = el("p", "text-sm text-slate-300 leading-relaxed");
                     adviceText.textContent = rec.standards_advice;
                     advicePanel.appendChild(adviceText);
+
+                    // Subtle disclaimer within the advice panel
+                    const disclaimer = el("p", "text-[10px] text-slate-600 mt-3 leading-relaxed font-mono");
+                    disclaimer.textContent = "AI-generated guidance \u2014 verify accreditation at ukas.com and confirm suitability with the lab.";
+                    advicePanel.appendChild(disclaimer);
+
                     resultsDiv.appendChild(advicePanel);
                 }
 
@@ -205,6 +241,11 @@
                     resultsDiv.appendChild(card);
                 });
             }
+
+            // Bottom disclaimer on all advisor results
+            if (searchMode === "labs" && data.results.length > 0) {
+                resultsDiv.appendChild(buildDisclaimer());
+            }
         } catch (err) {
             statusDiv.classList.add("hidden");
             if (searchBtn) searchBtn.classList.remove("search-btn-loading");
@@ -214,6 +255,83 @@
             errDiv.textContent = "Search failed. Please try again.";
             resultsDiv.appendChild(errDiv);
         }
+    }
+
+    function showClarification(originalQuery, questions) {
+        resultsDiv.textContent = "";
+        if (aboutSection) aboutSection.classList.add("hidden");
+
+        const panel = el("div", "max-w-2xl mx-auto");
+
+        const intro = el("p", "text-sm text-slate-400 mb-5");
+        intro.textContent = "A couple of quick questions to help us find the best labs for you:";
+        panel.appendChild(intro);
+
+        const answers = {};
+
+        questions.forEach((question, qIdx) => {
+            const qBlock = el("div", "mb-5");
+            const qText = el("p", "text-sm text-white font-semibold mb-2.5");
+            qText.textContent = question.text;
+            qBlock.appendChild(qText);
+
+            const optionsWrap = el("div", "flex flex-wrap gap-2");
+            (question.options || []).forEach((opt) => {
+                const pill = el("button", "clarify-pill px-4 py-2 rounded-lg border border-white/10 bg-white/[0.04] text-sm text-slate-300 hover:border-accent/50 hover:text-white hover:bg-white/[0.06] transition-all cursor-pointer");
+                pill.textContent = opt;
+                pill.addEventListener("click", () => {
+                    // Toggle selection
+                    optionsWrap.querySelectorAll(".clarify-pill").forEach((p) => {
+                        p.classList.remove("border-accent", "bg-accent/10", "text-white");
+                        p.classList.add("border-white/10", "bg-white/[0.04]", "text-slate-300");
+                    });
+                    pill.classList.remove("border-white/10", "bg-white/[0.04]", "text-slate-300");
+                    pill.classList.add("border-accent", "bg-accent/10", "text-white");
+                    answers[qIdx] = opt;
+
+                    // Auto-proceed once all questions answered
+                    if (Object.keys(answers).length === questions.length) {
+                        setTimeout(() => submitClarified(originalQuery, questions, answers), 300);
+                    }
+                });
+                optionsWrap.appendChild(pill);
+            });
+            qBlock.appendChild(optionsWrap);
+            panel.appendChild(qBlock);
+        });
+
+        // Skip link
+        const skipWrap = el("div", "mt-4");
+        const skipLink = el("button", "text-xs text-slate-600 hover:text-slate-400 transition-colors cursor-pointer");
+        skipLink.textContent = "Skip \u2014 search as-is";
+        skipLink.addEventListener("click", () => {
+            skipClarify = true;
+            doSearch();
+        });
+        skipWrap.appendChild(skipLink);
+        panel.appendChild(skipWrap);
+
+        resultsDiv.appendChild(panel);
+    }
+
+    function submitClarified(originalQuery, questions, answers) {
+        // Build enriched query: original + context from answers
+        const parts = [originalQuery];
+        for (const [idx, answer] of Object.entries(answers)) {
+            const q = questions[Number(idx)];
+            parts.push(q.text + " " + answer);
+        }
+        const enriched = parts.join(". ");
+        skipClarify = true;
+        doSearch(enriched);
+    }
+
+    function buildDisclaimer() {
+        const wrapper = el("div", "mt-6 mb-2 px-1");
+        const text = el("p", "text-[11px] text-slate-600 leading-relaxed font-mono");
+        text.textContent = "AI-generated guidance \u2014 not a substitute for professional advice. Always verify lab accreditation status at ukas.com and confirm testing suitability directly with the laboratory before proceeding.";
+        wrapper.appendChild(text);
+        return wrapper;
     }
 
     function buildResultCard(r, maxRrf, idx) {
