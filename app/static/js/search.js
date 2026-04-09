@@ -118,10 +118,12 @@
 
         skipClarify = false;
 
-        // Loading state
-        statusDiv.classList.remove("hidden");
-        const statusText2 = statusDiv.querySelector("span:last-child");
-        if (statusText2) statusText2.textContent = "Analysing your requirements...";
+        // Loading state — skip global spinner if we came from clarification (inline spinner shown)
+        if (!enrichedQuery) {
+            statusDiv.classList.remove("hidden");
+            const statusText2 = statusDiv.querySelector("span:last-child");
+            if (statusText2) statusText2.textContent = "Analysing your requirements...";
+        }
         resultCount.classList.add("hidden");
         if (searchBtn) searchBtn.classList.add("search-btn-loading");
 
@@ -262,60 +264,119 @@
         if (aboutSection) aboutSection.classList.add("hidden");
 
         const panel = el("div", "max-w-2xl mx-auto");
-
         const intro = el("p", "text-sm text-slate-400 mb-5");
         intro.textContent = "A couple of quick questions to help us find the best labs for you:";
         panel.appendChild(intro);
 
-        const answers = {};
+        // Container where questions appear sequentially
+        const questionsContainer = el("div", "");
+        panel.appendChild(questionsContainer);
 
-        questions.forEach((question, qIdx) => {
-            const qBlock = el("div", "mb-5");
+        // Spinner placeholder — appears after final answer
+        const spinnerSlot = el("div", "hidden mt-4");
+        panel.appendChild(spinnerSlot);
+
+        resultsDiv.appendChild(panel);
+
+        const answers = {};
+        let currentIdx = 0;
+
+        function shouldSkipQuestion(qIdx) {
+            // Heuristic: if this question's text contains a term from a previous
+            // option that was available but NOT chosen, it's likely drilling into
+            // the unchosen path — skip it.
+            const qTextLower = questions[qIdx].text.toLowerCase();
+            for (const [prevIdx, chosenOpt] of Object.entries(answers)) {
+                const prevQ = questions[Number(prevIdx)];
+                const unchosen = (prevQ.options || []).filter(
+                    (o) => o.toLowerCase() !== chosenOpt.toLowerCase()
+                );
+                for (const opt of unchosen) {
+                    // Check if any significant word (4+ chars) from the unchosen
+                    // option appears in this question's text
+                    const words = opt.toLowerCase().split(/\s+/).filter((w) => w.length >= 4);
+                    if (words.length > 0 && words.some((w) => qTextLower.includes(w))) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        function showNextQuestion() {
+            // Find next non-skippable question
+            while (currentIdx < questions.length && shouldSkipQuestion(currentIdx)) {
+                currentIdx++;
+            }
+            if (currentIdx >= questions.length) {
+                finishClarification(originalQuery, questions, answers, spinnerSlot);
+                return;
+            }
+
+            const question = questions[currentIdx];
+            const qIdx = currentIdx;
+            currentIdx++;
+
+            const qBlock = el("div", "mb-5 result-enter");
             const qText = el("p", "text-sm text-white font-semibold mb-2.5");
             qText.textContent = question.text;
             qBlock.appendChild(qText);
 
             const optionsWrap = el("div", "flex flex-wrap gap-2");
+
             (question.options || []).forEach((opt) => {
                 const pill = el("button", "clarify-pill px-4 py-2 rounded-lg border border-white/10 bg-white/[0.04] text-sm text-slate-300 hover:border-accent/50 hover:text-white hover:bg-white/[0.06] transition-all cursor-pointer");
                 pill.textContent = opt;
                 pill.addEventListener("click", () => {
-                    // Toggle selection
-                    optionsWrap.querySelectorAll(".clarify-pill").forEach((p) => {
-                        p.classList.remove("border-accent", "bg-accent/10", "text-white");
-                        p.classList.add("border-white/10", "bg-white/[0.04]", "text-slate-300");
-                    });
-                    pill.classList.remove("border-white/10", "bg-white/[0.04]", "text-slate-300");
-                    pill.classList.add("border-accent", "bg-accent/10", "text-white");
                     answers[qIdx] = opt;
-
-                    // Auto-proceed once all questions answered
-                    if (Object.keys(answers).length === questions.length) {
-                        setTimeout(() => submitClarified(originalQuery, questions, answers), 300);
-                    }
+                    // Lock this question: highlight chosen, disable all
+                    optionsWrap.querySelectorAll(".clarify-pill").forEach((p) => {
+                        p.classList.add("pointer-events-none", "opacity-40");
+                        p.classList.remove("hover:border-accent/50", "hover:text-white", "hover:bg-white/[0.06]");
+                    });
+                    pill.classList.remove("opacity-40", "border-white/10", "bg-white/[0.04]", "text-slate-300");
+                    pill.classList.add("border-accent", "bg-accent/10", "text-white", "opacity-100");
+                    // Remove skip button for this question
+                    const skipBtn = qBlock.querySelector(".clarify-skip");
+                    if (skipBtn) skipBtn.remove();
+                    setTimeout(showNextQuestion, 250);
                 });
                 optionsWrap.appendChild(pill);
             });
+
+            // Per-question skip
+            const skipBtn = el("button", "clarify-skip px-3 py-2 text-xs text-slate-600 hover:text-slate-400 transition-colors cursor-pointer");
+            skipBtn.textContent = "skip";
+            skipBtn.addEventListener("click", () => {
+                // Fade out question
+                qBlock.classList.add("opacity-40");
+                optionsWrap.querySelectorAll(".clarify-pill").forEach((p) => {
+                    p.classList.add("pointer-events-none");
+                });
+                skipBtn.remove();
+                setTimeout(showNextQuestion, 150);
+            });
+            optionsWrap.appendChild(skipBtn);
+
             qBlock.appendChild(optionsWrap);
-            panel.appendChild(qBlock);
-        });
+            questionsContainer.appendChild(qBlock);
+        }
 
-        // Skip link
-        const skipWrap = el("div", "mt-4");
-        const skipLink = el("button", "text-xs text-slate-600 hover:text-slate-400 transition-colors cursor-pointer");
-        skipLink.textContent = "Skip \u2014 search as-is";
-        skipLink.addEventListener("click", () => {
-            skipClarify = true;
-            doSearch();
-        });
-        skipWrap.appendChild(skipLink);
-        panel.appendChild(skipWrap);
-
-        resultsDiv.appendChild(panel);
+        showNextQuestion();
     }
 
-    function submitClarified(originalQuery, questions, answers) {
-        // Build enriched query: original + context from answers
+    function finishClarification(originalQuery, questions, answers, spinnerSlot) {
+        // Show inline spinner
+        spinnerSlot.classList.remove("hidden");
+        const spinnerInner = el("div", "inline-flex items-center gap-3 text-sm text-slate-500 font-mono");
+        const spinner = el("span", "search-spinner");
+        const spinnerText = el("span", "");
+        spinnerText.textContent = "Analysing your requirements...";
+        spinnerInner.appendChild(spinner);
+        spinnerInner.appendChild(spinnerText);
+        spinnerSlot.appendChild(spinnerInner);
+
+        // Build enriched query
         const parts = [originalQuery];
         for (const [idx, answer] of Object.entries(answers)) {
             const q = questions[Number(idx)];
