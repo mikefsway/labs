@@ -41,7 +41,7 @@ Matching labs:
 
 Return JSON: {{"standards_advice": string|null, "key_standards": [string]|null, "groups": [{{"heading": string, "explanation": string, "lab_ids": [int]}}]}}
 
-standards_advice: if the query is about a product/problem (not a specific test), briefly note which standards apply (2 sentences max). Null if query already names a standard.
+standards_advice: if the query is about a product/problem (not a specific test), briefly note which standards apply (2 sentences max). Null if query already names a standard. Write as direct advice to the user — do NOT reference your internal data, "listed standards", "the other standards", or "matching labs". The user cannot see the raw data you were given.
 key_standards: array of the 1-3 most relevant standard reference codes you identified (e.g. ["ISO 7173", "BS EN 1021-1"]). Null if none identified. Use the short reference form without year.
 groups: categorise labs into groups. IMPORTANT: Before including any lab, check its tags and title for domain-specific terms. DROP any lab serving a clearly wrong industry — e.g. "medical-implants" is wrong for furniture, "aircraft-interior" is wrong for food, "veterinary" is wrong for construction. Material overlap alone (e.g. both test "plastics") is NOT enough — the application must be relevant. Explain match quality per group. Be concise."""
 
