@@ -95,6 +95,14 @@ All search RPCs check `lab_sites.address` in addition to `labs.address` for regi
 - Use $frag$ dollar-quoting for SQL inserts
 - After insert: run `python -m scraper.embed_fraglets` to embed new fraglets
 
+### Brief field style rules
+
+- **NEVER include the lab name** in the `brief` field. The lab name is displayed separately on the results page and is blurred for unauthenticated users — including it in the brief leaks the name and wastes space.
+- **DO include the location** (town/city, county/region) — e.g. "Based in Ramsgate, Kent, provides..."
+- Start with either "Based in [location], provides/offers..." or directly with the verb "Provides UKAS-accredited..."
+- One to two sentences. Concrete language, no filler, no clichés, no superlatives.
+- The `detail` and `title` fields must also not include the lab name.
+
 ## IP protection
 
 - Lab detail page shows `brief` + structured `additional` capabilities + UKAS PDF links
@@ -108,6 +116,16 @@ All search RPCs check `lab_sites.address` in addition to `labs.address` for regi
 - 88 multi-site labs: addresses were misclassified as capabilities, now in `lab_sites` table with site_code
 - schedule_pdfs.json URLs stored in labs.schedule_pdfs JSONB (not predictable URL pattern)
 - UKAS data is public; BHB v William Hill precedent favours factual data reuse
+
+## Security
+
+- **Prompt injection**: System/user message separation in LLM prompts. User input sanitised and truncated (500 char max). LLM output `lab_ids` validated against actual search results.
+- **Input validation**: `max_length` constraints on all query parameters.
+- **Supabase access**: Public endpoints use anon client (not service key). RLS enabled on all tables with SELECT-only anon policy.
+- **Rate limiting**: slowapi (10-30 req/min per IP on search endpoints). Brute-force protection on Basic Auth (10 failures / 5 min).
+- **MCP auth**: Fails closed (503) when API keys not configured. Timing-safe comparison (`secrets.compare_digest`) for MCP API keys.
+- **Bot protection**: Honeypot field + Cloudflare Turnstile on magic link sign-in. Turnstile degrades gracefully when unconfigured. Client-side 30s cooldown between magic link requests.
+- **Turnstile env vars**: `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`. Warning logged when missing.
 
 ## Commands
 
