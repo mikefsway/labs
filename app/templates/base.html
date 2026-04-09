@@ -140,7 +140,12 @@
 
     function _renderTurnstile() {
         const container = document.getElementById("turnstile-widget");
-        if (!container || !TURNSTILE_SITE_KEY || typeof turnstile === "undefined") return;
+        if (!container || !TURNSTILE_SITE_KEY) return;
+        if (typeof turnstile === "undefined") {
+            // Script not loaded yet — retry shortly
+            setTimeout(_renderTurnstile, 200);
+            return;
+        }
         container.textContent = "";
         _turnstileWidgetId = turnstile.render(container, {
             sitekey: TURNSTILE_SITE_KEY,
