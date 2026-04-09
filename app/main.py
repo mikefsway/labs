@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app.config import get_settings
-from app.routers import labs, search
+from app.routers import auth, labs, search
 
 app = FastAPI(title="LabCurate", version="0.1.0")
 
@@ -36,6 +36,7 @@ async def basic_auth_middleware(request: Request, call_next):
 
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.include_router(auth.router)
 app.include_router(search.router)
 app.include_router(labs.router)
 
@@ -47,6 +48,7 @@ def _supabase_ctx():
     return {
         "supabase_url": settings.supabase_url,
         "supabase_anon_key": settings.supabase_anon_key,
+        "turnstile_site_key": settings.turnstile_site_key,
     }
 
 

@@ -28,9 +28,11 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
     <script>
         const SUPABASE_URL = "{{ supabase_url }}";
         const SUPABASE_ANON_KEY = "{{ supabase_anon_key }}";
+        const TURNSTILE_SITE_KEY = "{{ turnstile_site_key }}";
     </script>
 </head>
 <body class="bg-navy-950 text-slate-200 min-h-screen font-body antialiased">
@@ -93,6 +95,11 @@
                 <input id="auth-email" type="email" placeholder="your@email.com"
                     class="w-full px-4 py-3 bg-white/[0.04] border border-white/10 rounded-lg text-white text-sm placeholder:text-slate-600 focus:outline-none focus:border-accent/50 transition-colors font-mono mb-3"
                     autocomplete="email">
+                <!-- Honeypot — hidden from real users -->
+                <div style="position:absolute;left:-9999px" aria-hidden="true">
+                    <input type="text" id="auth-website" name="website" tabindex="-1" autocomplete="off">
+                </div>
+                <div id="turnstile-widget" class="mb-3"></div>
                 <button id="auth-submit" onclick="sendMagicLink()"
                     class="w-full px-4 py-3 bg-accent/90 hover:bg-accent text-white font-semibold rounded-lg transition-colors font-display text-sm tracking-wide cursor-pointer">
                     Send magic link
@@ -113,27 +120,93 @@
         : null;
 
     let _user = null;
+    let _turnstileWidgetId = null;
+    const MAGIC_LINK_COOLDOWN_MS = 30000;
 
     function showAuthModal() {
         document.getElementById("auth-modal").classList.remove("hidden");
         document.getElementById("auth-form").classList.remove("hidden");
         document.getElementById("auth-sent").classList.add("hidden");
         document.getElementById("auth-error").classList.add("hidden");
+        const honeypot = document.getElementById("auth-website");
+        if (honeypot) honeypot.value = "";
         setTimeout(() => document.getElementById("auth-email").focus(), 100);
+        _renderTurnstile();
     }
 
     function hideAuthModal() {
         document.getElementById("auth-modal").classList.add("hidden");
     }
 
+    function _renderTurnstile() {
+        const container = document.getElementById("turnstile-widget");
+        if (!container || !TURNSTILE_SITE_KEY || typeof turnstile === "undefined") return;
+        container.textContent = "";
+        _turnstileWidgetId = turnstile.render(container, {
+            sitekey: TURNSTILE_SITE_KEY,
+            theme: "dark",
+            callback: function(token) { container.dataset.token = token; },
+        });
+    }
+
+    function _showAuthError(msg) {
+        const errEl = document.getElementById("auth-error");
+        errEl.textContent = msg;
+        errEl.classList.remove("hidden");
+    }
+
     async function sendMagicLink() {
+        // Honeypot check
+        const honeypot = document.getElementById("auth-website");
+        if (honeypot && honeypot.value) return;
+
         const email = document.getElementById("auth-email").value.trim();
         if (!email) return;
+
+        // Client-side rate limiting
+        const lastSent = parseInt(localStorage.getItem("lc_magic_ts") || "0", 10);
+        if (Date.now() - lastSent < MAGIC_LINK_COOLDOWN_MS) {
+            const secsLeft = Math.ceil((MAGIC_LINK_COOLDOWN_MS - (Date.now() - lastSent)) / 1000);
+            _showAuthError("Please wait " + secsLeft + "s before requesting another link.");
+            return;
+        }
+
         const btn = document.getElementById("auth-submit");
         const errEl = document.getElementById("auth-error");
         btn.textContent = "Sending...";
         btn.disabled = true;
         errEl.classList.add("hidden");
+
+        // Turnstile verification
+        const turnstileContainer = document.getElementById("turnstile-widget");
+        const turnstileToken = turnstileContainer ? turnstileContainer.dataset.token : null;
+        if (TURNSTILE_SITE_KEY && !turnstileToken) {
+            _showAuthError("Please complete the verification challenge.");
+            btn.textContent = "Send magic link";
+            btn.disabled = false;
+            return;
+        }
+        if (turnstileToken) {
+            try {
+                const verifyResp = await fetch("/api/auth/verify-turnstile", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ token: turnstileToken }),
+                });
+                if (!verifyResp.ok) {
+                    _showAuthError("Verification failed. Please try again.");
+                    btn.textContent = "Send magic link";
+                    btn.disabled = false;
+                    _renderTurnstile();
+                    return;
+                }
+            } catch (err) {
+                _showAuthError("Verification error. Please try again.");
+                btn.textContent = "Send magic link";
+                btn.disabled = false;
+                return;
+            }
+        }
 
         const { error } = await _sb.auth.signInWithOtp({
             email,
@@ -141,11 +214,11 @@
         });
 
         if (error) {
-            errEl.textContent = error.message;
-            errEl.classList.remove("hidden");
+            _showAuthError(error.message);
             btn.textContent = "Send magic link";
             btn.disabled = false;
         } else {
+            localStorage.setItem("lc_magic_ts", String(Date.now()));
             document.getElementById("auth-form").classList.add("hidden");
             document.getElementById("auth-sent").classList.remove("hidden");
         }
