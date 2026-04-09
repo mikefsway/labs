@@ -1,13 +1,38 @@
+import base64
 import secrets
+import time
+from collections import defaultdict
 
 from fastapi import FastAPI, Request, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.config import get_settings
+from app.ratelimit import limiter
 from app.routers import auth, labs, search
 
 app = FastAPI(title="LabCurate", version="0.1.0")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# --- Brute-force protection ---
+_auth_failures: dict[str, list[float]] = defaultdict(list)
+_AUTH_MAX_FAILURES = 10
+_AUTH_WINDOW_SECONDS = 300
+
+
+def _is_ip_blocked(ip: str) -> bool:
+    now = time.monotonic()
+    attempts = _auth_failures[ip]
+    # Prune old entries
+    _auth_failures[ip] = [t for t in attempts if now - t < _AUTH_WINDOW_SECONDS]
+    return len(_auth_failures[ip]) >= _AUTH_MAX_FAILURES
+
+
+def _record_failure(ip: str):
+    _auth_failures[ip].append(time.monotonic())
 
 
 @app.middleware("http")
@@ -18,16 +43,22 @@ async def basic_auth_middleware(request: Request, call_next):
     # Allow health check without auth
     if request.url.path == "/health":
         return await call_next(request)
-    auth = request.headers.get("authorization", "")
-    if auth.startswith("Basic "):
-        import base64
+
+    client_ip = request.client.host if request.client else "unknown"
+    if _is_ip_blocked(client_ip):
+        return Response(content="Too many failed attempts", status_code=429)
+
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.startswith("Basic "):
         try:
-            decoded = base64.b64decode(auth[6:]).decode()
+            decoded = base64.b64decode(auth_header[6:]).decode()
             _, password = decoded.split(":", 1)
             if secrets.compare_digest(password, settings.site_password):
+                _auth_failures.pop(client_ip, None)
                 return await call_next(request)
         except Exception:
             pass
+    _record_failure(client_ip)
     return Response(
         content="Authentication required",
         status_code=401,

@@ -8,13 +8,34 @@ Two-phase approach:
 """
 
 import json
+import re
 
 from openai import AsyncOpenAI
 
 from app.config import get_settings
-from app.database import get_supabase_client
+from app.database import get_supabase_anon_client
 
 RECOMMENDATION_MODEL = "gpt-5.4-mini"
+
+RECOMMENDATION_SYSTEM_PROMPT = """You advise users searching for UKAS-accredited UK testing labs.
+
+You will receive a user query and a list of matching labs. Return JSON only:
+{"standards_advice": string|null, "key_standards": [string]|null, "groups": [{"heading": string, "explanation": string, "lab_ids": [int]}]}
+
+standards_advice: if the query is about a product/problem (not a specific test), briefly note which standards apply (2 sentences max). Null if query already names a standard. Write as direct advice to the user — do NOT reference your internal data, "listed standards", "the other standards", or "matching labs". The user cannot see the raw data you were given.
+key_standards: array of the 1-3 most relevant standard reference codes you identified (e.g. ["ISO 7173", "BS EN 1021-1"]). Null if none identified. Use the short reference form without year.
+groups: categorise labs into groups. IMPORTANT: Before including any lab, check its tags and title for domain-specific terms. DROP any lab serving a clearly wrong industry — e.g. "medical-implants" is wrong for furniture, "aircraft-interior" is wrong for food, "veterinary" is wrong for construction. Material overlap alone (e.g. both test "plastics") is NOT enough — the application must be relevant. Explain match quality per group. Be concise.
+
+IMPORTANT: Only use lab_ids that appear in the provided data. Do not fabricate IDs."""
+
+
+def _sanitise_query(query: str) -> str:
+    """Sanitise user input before including in LLM prompts."""
+    # Truncate to 500 chars
+    query = query[:500]
+    # Remove control characters (keep newlines/tabs for readability)
+    query = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", query)
+    return query.strip()
 
 
 async def generate_recommendation(
@@ -29,26 +50,19 @@ async def generate_recommendation(
     settings = get_settings()
     client = AsyncOpenAI(api_key=settings.openai_api_key)
 
+    sanitised_query = _sanitise_query(query)
     results_text = _format_results(results, mode)
     standards_text = _format_standards(standards) if standards else ""
 
-    prompt = f"""Advise a user searching for UKAS-accredited UK testing labs.
-
-Query: "{query}"
-{standards_text}
-Matching labs:
-{results_text}
-
-Return JSON: {{"standards_advice": string|null, "key_standards": [string]|null, "groups": [{{"heading": string, "explanation": string, "lab_ids": [int]}}]}}
-
-standards_advice: if the query is about a product/problem (not a specific test), briefly note which standards apply (2 sentences max). Null if query already names a standard. Write as direct advice to the user — do NOT reference your internal data, "listed standards", "the other standards", or "matching labs". The user cannot see the raw data you were given.
-key_standards: array of the 1-3 most relevant standard reference codes you identified (e.g. ["ISO 7173", "BS EN 1021-1"]). Null if none identified. Use the short reference form without year.
-groups: categorise labs into groups. IMPORTANT: Before including any lab, check its tags and title for domain-specific terms. DROP any lab serving a clearly wrong industry — e.g. "medical-implants" is wrong for furniture, "aircraft-interior" is wrong for food, "veterinary" is wrong for construction. Material overlap alone (e.g. both test "plastics") is NOT enough — the application must be relevant. Explain match quality per group. Be concise."""
+    user_content = f"Query: {sanitised_query}\n{standards_text}\nMatching labs:\n{results_text}"
 
     try:
         response = await client.chat.completions.create(
             model=RECOMMENDATION_MODEL,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[
+                {"role": "system", "content": RECOMMENDATION_SYSTEM_PROMPT},
+                {"role": "user", "content": user_content},
+            ],
             temperature=0.3,
             max_completion_tokens=600,
         )
@@ -58,6 +72,16 @@ groups: categorise labs into groups. IMPORTANT: Before including any lab, check 
             if text.endswith("```"):
                 text = text[:-3]
         rec = json.loads(text)
+
+        # Validate output: only allow lab_ids from actual results
+        valid_lab_ids = {r.get("lab_id") for r in results}
+        for g in rec.get("groups", []):
+            g["lab_ids"] = [lid for lid in g.get("lab_ids", []) if lid in valid_lab_ids]
+        rec["groups"] = [g for g in rec.get("groups", []) if g.get("lab_ids")]
+
+        # Cap standards_advice length
+        if rec.get("standards_advice") and len(rec["standards_advice"]) > 500:
+            rec["standards_advice"] = rec["standards_advice"][:500]
 
         # Phase 2: if key standards identified, find labs that explicitly list them
         key_stds = rec.get("key_standards")
@@ -102,7 +126,7 @@ groups: categorise labs into groups. IMPORTANT: Before including any lab, check 
 
 async def _find_labs_with_standards(standard_refs: list[str]) -> list[int]:
     """Find lab_ids that have capabilities explicitly listing these standards."""
-    db = get_supabase_client()
+    db = get_supabase_anon_client()
     lab_ids = set()
     for ref in standard_refs:
         # Strip "ISO " or "BS EN " prefix variations for flexible matching

@@ -1,10 +1,14 @@
 """Auth routes — Turnstile verification for magic link bot protection."""
 
+import logging
+
 import httpx
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from app.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -18,6 +22,7 @@ async def verify_turnstile(body: TurnstileRequest, request: Request):
     """Verify a Cloudflare Turnstile token before sending a magic link."""
     settings = get_settings()
     if not settings.turnstile_secret_key:
+        logger.warning("TURNSTILE_SECRET_KEY not set — Turnstile verification skipped")
         return {"success": True}
 
     async with httpx.AsyncClient() as client:

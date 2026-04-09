@@ -101,9 +101,9 @@ async def get_lab(lab_id: int) -> str:
     Args:
         lab_id: The lab's database ID (from search results)
     """
-    from app.database import get_supabase_client
+    from app.database import get_supabase_anon_client
 
-    client = get_supabase_client()
+    client = get_supabase_anon_client()
     lab = client.table("labs").select("*").eq("id", lab_id).single().execute()
     if not lab.data:
         return f"Lab with ID {lab_id} not found."

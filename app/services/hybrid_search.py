@@ -1,4 +1,4 @@
-from app.database import get_supabase_client
+from app.database import get_supabase_anon_client
 from app.services.embedding import generate_embedding
 
 
@@ -6,7 +6,7 @@ async def search_capabilities(
     query: str, limit: int = 20, region: str | None = None
 ) -> list[dict]:
     embedding = await generate_embedding(query)
-    client = get_supabase_client()
+    client = get_supabase_anon_client()
     result = client.rpc(
         "hybrid_search_capabilities",
         {
@@ -23,7 +23,7 @@ async def search_lab_fraglets(
     query: str, limit: int = 10, region: str | None = None
 ) -> list[dict]:
     embedding = await generate_embedding(query)
-    client = get_supabase_client()
+    client = get_supabase_anon_client()
     result = client.rpc(
         "hybrid_search_lab_fraglets",
         {
@@ -40,7 +40,7 @@ async def search_standards(
     query: str, limit: int = 5
 ) -> list[dict]:
     embedding = await generate_embedding(query)
-    client = get_supabase_client()
+    client = get_supabase_anon_client()
     result = client.rpc(
         "search_standards",
         {

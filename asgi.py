@@ -8,6 +8,7 @@ Routes:
 import contextlib
 import logging
 import os
+import secrets
 import sys
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -62,8 +63,13 @@ class MCPWithAuth:
         allowed = _get_allowed_keys()
 
         if not allowed:
-            logger.warning("LABS_MCP_API_KEYS not set — MCP is open")
-        elif not api_key or api_key not in allowed:
+            logger.warning("LABS_MCP_API_KEYS not set — rejecting all MCP requests")
+            response = JSONResponse(
+                {"error": "MCP not configured"}, status_code=503
+            )
+            await response(scope, receive, send)
+            return
+        elif not api_key or not any(secrets.compare_digest(api_key, k) for k in allowed):
             response = JSONResponse(
                 {"error": "Invalid or missing API key"}, status_code=401
             )

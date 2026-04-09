@@ -5,6 +5,7 @@ questions would meaningfully improve the results.
 """
 
 import json
+import re
 
 from openai import AsyncOpenAI
 
@@ -12,23 +13,9 @@ from app.config import get_settings
 
 CLARIFY_MODEL = "gpt-5.4-mini"
 
+CLARIFY_SYSTEM_PROMPT = """You help users find UKAS-accredited UK testing laboratories.
 
-async def maybe_clarify(query: str) -> dict | None:
-    """Return clarifying questions if the query is too vague, else None.
-
-    Returns:
-        None if query is already specific enough.
-        {"questions": [{"text": str, "options": [str]}]} if clarification needed.
-    """
-    settings = get_settings()
-    client = AsyncOpenAI(api_key=settings.openai_api_key)
-
-    prompt = f"""You help users find UKAS-accredited UK testing laboratories.
-
-A user has submitted this query:
-"{query}"
-
-Decide whether the query is specific enough to produce good lab recommendations, or whether 1-3 short clarifying questions would meaningfully improve the results.
+Decide whether a user query is specific enough to produce good lab recommendations, or whether 1-3 short clarifying questions would meaningfully improve the results.
 
 A query is SPECIFIC ENOUGH if it already mentions:
 - A specific product/material AND a clear testing need, OR
@@ -42,7 +29,7 @@ A query NEEDS CLARIFICATION if it is vague about:
 - The industry or application (when the material could span multiple sectors)
 
 If clarification is needed, return JSON:
-{{"needs_clarification": true, "questions": [{{"text": "question text", "options": ["option1", "option2", "option3"]}}]}}
+{"needs_clarification": true, "questions": [{"text": "question text", "options": ["option1", "option2", "option3"]}]}
 
 Rules for questions:
 - Maximum 3 questions, prefer fewer
@@ -52,12 +39,35 @@ Rules for questions:
 - Never ask about location (handled separately)
 
 If the query is already specific enough, return:
-{{"needs_clarification": false}}"""
+{"needs_clarification": false}"""
+
+
+def _sanitise_query(query: str) -> str:
+    """Sanitise user input before including in LLM prompts."""
+    query = query[:500]
+    query = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", query)
+    return query.strip()
+
+
+async def maybe_clarify(query: str) -> dict | None:
+    """Return clarifying questions if the query is too vague, else None.
+
+    Returns:
+        None if query is already specific enough.
+        {"questions": [{"text": str, "options": [str]}]} if clarification needed.
+    """
+    settings = get_settings()
+    client = AsyncOpenAI(api_key=settings.openai_api_key)
+
+    sanitised_query = _sanitise_query(query)
 
     try:
         response = await client.chat.completions.create(
             model=CLARIFY_MODEL,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[
+                {"role": "system", "content": CLARIFY_SYSTEM_PROMPT},
+                {"role": "user", "content": sanitised_query},
+            ],
             temperature=0.2,
             max_completion_tokens=300,
         )

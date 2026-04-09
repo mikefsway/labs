@@ -1,10 +1,11 @@
 import asyncio
 import math
 
-from fastapi import APIRouter, Query
-from pydantic import BaseModel
+from fastapi import APIRouter, Query, Request
+from pydantic import BaseModel, field_validator
 
-from app.database import get_supabase_client
+from app.database import get_supabase_anon_client
+from app.ratelimit import limiter
 from app.services.geocode import geocode
 from app.services.hybrid_search import (
     find_multi_capability_labs,
@@ -40,18 +41,22 @@ def _add_distances(results, user_lat, user_lng):
 
 
 @router.get("/search")
+@limiter.limit("30/minute")
 async def search(
-    q: str = Query(..., min_length=2, description="Search query"),
+    request: Request,
+    q: str = Query(..., min_length=2, max_length=500, description="Search query"),
     limit: int = Query(10, ge=1, le=50),
-    region: str | None = Query(None, description="Region filter (e.g. 'London')"),
+    region: str | None = Query(None, max_length=100, description="Region filter (e.g. 'London')"),
 ):
     results = await search_capabilities(q, limit=limit, region=region)
     return {"query": q, "count": len(results), "results": results}
 
 
 @router.get("/search/clarify")
+@limiter.limit("10/minute")
 async def clarify(
-    q: str = Query(..., min_length=2, description="User query to check"),
+    request: Request,
+    q: str = Query(..., min_length=2, max_length=500, description="User query to check"),
 ):
     """Check if a query needs clarifying questions before searching."""
     result = await maybe_clarify(q)
@@ -61,11 +66,13 @@ async def clarify(
 
 
 @router.get("/search/labs")
+@limiter.limit("10/minute")
 async def search_labs(
-    q: str = Query(..., min_length=2, description="Search query"),
+    request: Request,
+    q: str = Query(..., min_length=2, max_length=500, description="Search query"),
     limit: int = Query(10, ge=1, le=50),
-    region: str | None = Query(None, description="Region filter (e.g. 'London')"),
-    location: str | None = Query(None, description="Postcode or town for proximity"),
+    region: str | None = Query(None, max_length=100, description="Region filter (e.g. 'London')"),
+    location: str | None = Query(None, max_length=100, description="Postcode or town for proximity"),
     recommend: bool = Query(False, description="Include LLM recommendation"),
 ):
     tasks = [search_lab_fraglets(q, limit=limit, region=region)]
@@ -97,7 +104,7 @@ async def search_labs(
                 for lid in g.get("extra_lab_ids", []):
                     extra_ids.add(lid)
             if extra_ids:
-                db = get_supabase_client()
+                db = get_supabase_anon_client()
                 extra_labs = (
                     db.table("lab_fraglets")
                     .select("lab_id, title, brief, tags, category")
@@ -132,8 +139,16 @@ class MultiMatchRequest(BaseModel):
     limit: int = 10
     region: str | None = None
 
+    @field_validator("queries")
+    @classmethod
+    def validate_queries(cls, v):
+        if len(v) > 10:
+            raise ValueError("Maximum 10 queries allowed")
+        return [q[:500] for q in v]
+
 
 @router.post("/match")
-async def multi_match(req: MultiMatchRequest):
+@limiter.limit("10/minute")
+async def multi_match(request: Request, req: MultiMatchRequest):
     results = await find_multi_capability_labs(req.queries, req.limit, req.region)
     return {"queries": req.queries, "count": len(results), "results": results}
