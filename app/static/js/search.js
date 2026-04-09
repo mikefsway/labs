@@ -23,6 +23,43 @@
     let searchMode = "labs"; // "labs" or "capabilities"
     let skipClarify = false; // set true after clarification or when query is specific
 
+    const MAX_ANON_SEARCHES = 3;
+
+    function isSignedIn() {
+        return typeof _user !== "undefined" && _user !== null;
+    }
+
+    function getAnonSearchCount() {
+        return parseInt(localStorage.getItem("lc_searches") || "0", 10);
+    }
+
+    function incrementAnonSearchCount() {
+        const count = getAnonSearchCount() + 1;
+        localStorage.setItem("lc_searches", String(count));
+        return count;
+    }
+
+    function showSearchGate() {
+        resultsDiv.textContent = "";
+        if (aboutSection) aboutSection.classList.add("hidden");
+        statusDiv.classList.add("hidden");
+        resultCount.classList.add("hidden");
+        if (searchBtn) searchBtn.classList.remove("search-btn-loading");
+
+        const gate = el("div", "max-w-md mx-auto text-center py-12");
+        const heading = el("h3", "font-display font-semibold text-white text-lg mb-2");
+        heading.textContent = "Sign in to keep searching";
+        const desc = el("p", "text-sm text-slate-400 mb-6 leading-relaxed");
+        desc.textContent = "Free accounts get unlimited searches, full lab details, and the ability to request quotes.";
+        const btn = el("button", "px-6 py-3 bg-accent/90 hover:bg-accent text-white font-semibold rounded-lg transition-colors font-display text-sm tracking-wide cursor-pointer");
+        btn.textContent = "Sign in with email";
+        btn.addEventListener("click", () => showAuthModal());
+        gate.appendChild(heading);
+        gate.appendChild(desc);
+        gate.appendChild(btn);
+        resultsDiv.appendChild(gate);
+    }
+
     // Mode toggle
     const modeDiv = document.getElementById("search-mode");
     if (modeDiv) {
@@ -83,6 +120,12 @@
             return;
         }
 
+        // Gate anonymous users after MAX_ANON_SEARCHES
+        if (!isSignedIn() && !enrichedQuery && getAnonSearchCount() >= MAX_ANON_SEARCHES) {
+            showSearchGate();
+            return;
+        }
+
         const location = locationInput ? locationInput.value.trim() : "";
 
         // Update URL
@@ -139,6 +182,7 @@
             statusDiv.classList.add("hidden");
             if (searchBtn) searchBtn.classList.remove("search-btn-loading");
             resultsDiv.textContent = "";
+            _signInHintShown = false;
 
             // Hide about section when we have results
             if (aboutSection) aboutSection.classList.add("hidden");
@@ -154,6 +198,9 @@
 
             countValue.textContent = data.count;
             resultCount.classList.remove("hidden");
+
+            // Track anonymous search count
+            if (!isSignedIn()) incrementAnonSearchCount();
 
             const maxRrf = data.results[0].rrf_score || 1;
 
@@ -387,6 +434,21 @@
         doSearch(enriched);
     }
 
+    let _signInHintShown = false;
+    function appendSignInHint(card) {
+        if (_signInHintShown) return;
+        _signInHintShown = true;
+        const hint = el("div", "mt-3 pt-3 border-t border-white/[0.06] flex items-center justify-between");
+        const text = el("span", "text-xs text-slate-500 font-mono");
+        text.textContent = "Sign in to see lab names and details";
+        const btn = el("button", "text-xs font-mono text-accent hover:text-white transition-colors cursor-pointer");
+        btn.textContent = "Sign in";
+        btn.addEventListener("click", (e) => { e.stopPropagation(); showAuthModal(); });
+        hint.appendChild(text);
+        hint.appendChild(btn);
+        card.appendChild(hint);
+    }
+
     function buildDisclaimer() {
         const wrapper = el("div", "mt-6 mb-2 px-1");
         const text = el("p", "text-[11px] text-slate-600 leading-relaxed font-mono");
@@ -396,9 +458,10 @@
     }
 
     function buildResultCard(r, maxRrf, idx) {
-        const card = document.createElement("a");
-        card.href = "/lab/" + r.lab_id;
-        card.className = "result-card result-enter";
+        const anon = !isSignedIn();
+        const card = document.createElement(anon ? "div" : "a");
+        if (!anon) card.href = "/lab/" + r.lab_id;
+        card.className = "result-card result-enter" + (anon ? " cursor-default" : "");
         card.style.animationDelay = (idx * 0.04) + "s";
 
         // Top row: lab name + accreditation
@@ -407,8 +470,10 @@
         const nameWrap = el("div", "min-w-0 flex-1");
         const name = el("h3", "font-display font-semibold text-white text-[15px] truncate");
         name.textContent = r.lab_name || "";
+        if (anon) name.classList.add("blur-sm", "select-none");
         const accred = el("span", "font-mono text-[11px] text-slate-500 tracking-wide");
         accred.textContent = "UKAS #" + (r.accreditation_number || "");
+        if (anon) accred.classList.add("blur-sm", "select-none");
         nameWrap.appendChild(name);
         nameWrap.appendChild(accred);
 
@@ -442,6 +507,7 @@
         pinIcon.textContent = "\u25CB";
         const addr = el("span", "truncate");
         addr.textContent = truncate(r.address || "", 70);
+        if (anon) addr.classList.add("blur-sm", "select-none");
         footer.appendChild(pinIcon);
         footer.appendChild(addr);
 
@@ -449,13 +515,15 @@
         card.appendChild(body);
         card.appendChild(footer);
 
+        if (anon) appendSignInHint(card);
         return card;
     }
 
     function buildLabCard(r, maxRrf, idx) {
-        const card = document.createElement("a");
-        card.href = "/lab/" + r.lab_id;
-        card.className = "result-card result-enter";
+        const anon = !isSignedIn();
+        const card = document.createElement(anon ? "div" : "a");
+        if (!anon) card.href = "/lab/" + r.lab_id;
+        card.className = "result-card result-enter" + (anon ? " cursor-default" : "");
         card.style.animationDelay = (idx * 0.04) + "s";
 
         // Top row: title + accreditation
@@ -464,8 +532,10 @@
         const nameWrap = el("div", "min-w-0 flex-1");
         const name = el("h3", "font-display font-semibold text-white text-[15px] truncate");
         name.textContent = r.title || r.lab_name || "";
+        if (anon) name.classList.add("blur-sm", "select-none");
         const accred = el("span", "font-mono text-[11px] text-slate-500 tracking-wide");
         accred.textContent = "UKAS #" + (r.accreditation_number || "");
+        if (anon) accred.classList.add("blur-sm", "select-none");
         nameWrap.appendChild(name);
         nameWrap.appendChild(accred);
 
@@ -529,6 +599,7 @@
         footer.appendChild(dot);
         const addr = el("span", "truncate");
         addr.textContent = truncate(r.address || "", 60);
+        if (anon) addr.classList.add("blur-sm", "select-none");
         footer.appendChild(addr);
 
         card.appendChild(top);
@@ -536,6 +607,7 @@
         if (r.tags && r.tags.length > 0) card.appendChild(tagsWrap);
         card.appendChild(footer);
 
+        if (anon) appendSignInHint(card);
         return card;
     }
 

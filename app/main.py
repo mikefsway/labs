@@ -42,14 +42,22 @@ app.include_router(labs.router)
 templates = Jinja2Templates(directory="app/templates")
 
 
+def _supabase_ctx():
+    settings = get_settings()
+    return {
+        "supabase_url": settings.supabase_url,
+        "supabase_anon_key": settings.supabase_anon_key,
+    }
+
+
 @app.get("/")
 async def index(request: Request):
-    return templates.TemplateResponse(request, "index.html")
+    return templates.TemplateResponse(request, "index.html", _supabase_ctx())
 
 
 @app.get("/lab/{lab_id}")
 async def lab_detail(request: Request, lab_id: int):
-    return templates.TemplateResponse(request, "lab.html", {"lab_id": lab_id})
+    return templates.TemplateResponse(request, "lab.html", {"lab_id": lab_id, **_supabase_ctx()})
 
 
 @app.get("/health")

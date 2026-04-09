@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     supabase_url: str
     supabase_service_key: str
+    supabase_anon_key: str = ""
     openai_api_key: str
     labs_mcp_api_keys: str = ""
     site_password: str = ""

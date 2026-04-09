@@ -13,5 +13,7 @@ services:
         sync: false
       - key: LABS_MCP_API_KEYS
         sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
       - key: SITE_PASSWORD
         sync: false
