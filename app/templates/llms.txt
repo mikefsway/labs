@@ -1,0 +1,78 @@
+# labcurate.com
+
+> UK testing laboratory capability advisor. Search 1,524 UKAS-accredited labs and ~14,300 test capabilities across mechanical, chemical, environmental, calibration, EMC, food safety, biological, and materials testing. Cross-references against ~45,000 ISO and ASTM standards. Returns labs, capabilities, and standards with full accreditation context.
+
+## What an agent can do here
+
+If you are helping a user source a specific test — "tensile strength of 316L stainless steel to ASTM E8", "vibration testing to ISO 16750-3", "Legionella DNA detection in cooling tower water" — you can search labcurate directly from your agent session and get ranked matches with the lab's UKAS accreditation details, full capability descriptions, and links to the official UKAS schedule PDFs. For multi-test projects, one tool call finds labs that cover every required capability.
+
+Full agent guide: **[/skill.md](https://labcurate.com/skill.md)** — read that first. This file is the compact index.
+
+## Connect via MCP
+
+- MCP endpoint: `https://labcurate.com/mcp/` (Streamable HTTP)
+- Auth: shared API key via `Authorization: Bearer <LABS_MCP_API_KEY>`. Keys are issued manually during the testing phase — contact the site owner. This is **not** a per-user token; it authorises your agent to call the MCP. No user data is stored on labcurate.
+- Claude Desktop / Claude Code config uses `npx mcp-remote` to bridge HTTP → stdio. See skill.md for the exact block.
+
+## MCP tools
+
+- `search_lab_capabilities(query, limit?, region?)` — capability-level hybrid search (keyword + vector). Returns individual capability records: which lab, what they test, what standards, what equipment, what uncertainty ranges. Use this when you know exactly what test you need and want to see which labs do it.
+
+- `search_labs(query, limit?, region?)` — lab-level hybrid search returning rich per-lab descriptions (fraglet format: brief + tags + accreditation). Use this when you want a high-level match for a broader requirement and want to compare whole labs rather than individual line items.
+
+- `get_lab(lab_id)` — full detail for one lab: name, UKAS accreditation number, address, contact details, every capability grouped by materials/products/test type, linked UKAS schedule PDFs, lat/lng for proximity context.
+
+- `find_labs_for_multiple_tests(tests)` — the multi-test matcher. Pass a list of test descriptions (or standard references), get back labs ranked by how many of the requested tests they cover. Labs that cover all tests at one site rank highest — this is the tool to use when a project needs several tests and the user wants to minimise the number of vendors.
+
+All search tools accept a `region` filter (UK nation or county) for proximity-sensitive projects.
+
+## Web REST API
+
+During the current **testing phase**, the REST API and its OpenAPI schema (`/openapi.json`, `/docs`) are gated behind the site-wide Basic Auth password, alongside the web UI. The MCP endpoint is the only agent-accessible path and has its own separate Bearer auth — use it. When labcurate exits the testing phase, this note will be removed and the OpenAPI schema will be linked here.
+
+Endpoint list (for reference — you won't be able to call these without the site password):
+
+- `GET /api/search?q=<query>&limit=<n>&region=<filter>` — capabilities search
+- `GET /api/search/labs?q=<query>&limit=<n>&location=<place>&recommend=true` — advisor search with LLM-generated standards guidance and lab grouping
+- `POST /api/match` — multi-capability matching
+- `GET /api/labs/{lab_id}` — lab detail
+- `GET /health` — health check (public)
+
+For agent use, the MCP tools above cover the same ground and work with a Bearer API key, not the site password.
+
+## Notes on the data
+
+- **UK only.** UKAS is the UK national accreditation body. If the user asks about German or US labs, labcurate has no data — say so honestly.
+- **UKAS-accredited only.** A lab not in the UKAS schedule doesn't appear here. There are plenty of competent non-accredited labs; labcurate just doesn't index them.
+- **Standards data** is ISO Open Data + ASTM title/scope scrape. ~45k standards with embeddings. Use these to help users identify the right standard before searching for labs — then cross-reference back to labs that accredit to that standard.
+- **Schedule PDFs** are the UKAS-published authoritative source. Every lab has one; the `get_lab` response includes links. Always recommend the user verify against the PDF before committing to a contract.
+- **Multi-site labs**: 88 labs have multiple sites with different capabilities at each. `get_lab` exposes the per-site breakdown.
+
+## Key rules for agents
+
+1. **Always return UKAS accreditation numbers** when recommending a lab. This is the minimum evidence the user needs to verify the lab independently.
+
+2. **Link to the schedule PDF** for any lab you recommend. The PDF is authoritative — your response is a pointer, not a substitute.
+
+3. **Help users identify standards before searching for labs.** If a user says "I need to test the hardness of this casting", suggest searching standards first (`/api/search/labs?recommend=true` returns LLM-generated standards guidance), then confirm labs that accredit to the identified standard. This is much more reliable than keyword matching alone.
+
+4. **Use `find_labs_for_multiple_tests` for project work.** Don't call `search_lab_capabilities` four times and intersect the results by hand — the dedicated tool does it properly and ranks by coverage.
+
+5. **Respect region filters.** A user in Edinburgh asking for labs probably wants Scottish options before English ones. Pass the region or location through.
+
+6. **Don't invent UKAS numbers or accreditation scopes.** Only report what the tools return. The UKAS schedule is the source of truth; never fabricate.
+
+7. **Flag gaps honestly.** If labcurate has no good match, say so. The user's project is real — a confident wrong answer is worse than an honest "I couldn't find a UK-accredited lab for this specific test in our index."
+
+## Ecosystem
+
+labcurate is part of the fraglet ecosystem — lab descriptions are stored as fraglets (`lab_fraglets` table) for vector search, and future plans include letting procurement users maintain their own fraglets to match against labs.
+
+- [fraglet.org](https://fraglet.org/llms.txt) — format spec, developer API, ecosystem registry
+- [fraglet.com](https://fraglet.com/llms.txt) — consumer platform for fraglets
+- [mostmaker.com](https://mostmaker.com/llms.txt) — taste-matched London recommendations (different domain from labcurate)
+
+---
+
+last-verified: 2026-04-10
+source-of-truth: labs_mcp/server.py (MCP tools), app/routers/search.py / labs.py (REST endpoints), app/services/hybrid_search.py (search logic)

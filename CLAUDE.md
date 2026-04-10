@@ -41,7 +41,7 @@ app/
   templates/               # Jinja2: base.html, index.html, lab.html
   static/                  # css/style.css, js/search.js
 labs_mcp/
-  server.py                # FastMCP: 3 tools for AI agent access
+  server.py                # FastMCP: 4 tools for AI agent access (search_lab_capabilities, search_labs, get_lab, find_labs_for_multiple_tests)
 asgi.py                    # Combined ASGI: FastAPI at /, MCP at /mcp
 scraper/
   fetch_orgs.py            # Fetch org records from UKAS REST API
@@ -137,3 +137,24 @@ python -m scraper.embed_standards                    # Embed standards (resumabl
 python -m scraper.scrape_astm                        # Scrape ASTM (resumable)
 python -m scraper.load_astm_standards                # Load ASTM into Supabase
 ```
+
+## Agent-facing artifacts — keep these in sync
+
+LabCurate has an MCP server and is listed in the fraglet ecosystem registry. Two files describe it to agents and must track code changes. When you make a **meaningful** change below, update the mapped artifact in the same commit and bump its `last-verified:` date.
+
+"Meaningful" = MCP tool added/removed/renamed, parameter change, new search mode, auth change, new region/industry scope, standards corpus expansion that unlocks a new capability category. **Not** meaningful: scraper maintenance, embedding refreshes, dataset top-ups, UI/template polish.
+
+| If you change...                                            | Update...                                                |
+|-------------------------------------------------------------|----------------------------------------------------------|
+| `labs_mcp/server.py` (any `@mcp.tool()`)                    | `app/templates/skill.md` AND `app/templates/llms.txt`    |
+| `app/routers/**` (public REST endpoints — `/api/search`, `/api/match`, `/api/labs/{id}`) | `app/templates/llms.txt`             |
+| `app/services/**` search-mode logic (keyword/vector/region blend) | `app/templates/skill.md` (usage guidance) |
+| Region scope expands beyond UK                              | `app/templates/llms.txt`, `fraglets/site/services.json`  |
+| Basic auth password / access model changes                  | `app/templates/skill.md` (setup section)                 |
+| MCP URL, auth flow, or account requirement                  | `app/templates/skill.md`, `fraglets/site/services.json`  |
+
+`skill.md` and `llms.txt` templates are at `app/templates/`. Routes are wired in `app/main.py` (`/skill.md`, `/llms.txt`, `/robots.txt`, `/sitemap.xml`, `/.well-known/mcp.json`). All six discovery paths are allowlisted in `basic_auth_middleware` so unauthenticated agents can reach them during the testing-phase password gate.
+
+To check for drift manually: `python scripts/check_agent_artifacts.py`. Exits non-zero if any source file is newer than its artifact's `last-verified:` date.
+
+Full rollout plan: `~/.claude/plans/agentic-welcoming-otter.md`.

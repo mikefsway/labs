@@ -34,6 +34,31 @@
         const SUPABASE_ANON_KEY = "{{ supabase_anon_key }}";
         const TURNSTILE_SITE_KEY = "{{ turnstile_site_key }}";
     </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "LabCurate",
+      "url": "https://labcurate.com",
+      "description": "UK testing laboratory capability advisor. Searches 1,524 UKAS-accredited labs and ~14,300 test capabilities across mechanical, chemical, environmental, calibration, EMC, food safety, biological, and materials testing. Cross-references against ~45,000 ISO and ASTM standards.",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Any",
+      "areaServed": {"@type": "Country", "name": "United Kingdom"},
+      "featureList": [
+        "UKAS-accredited lab search",
+        "Capability-level hybrid search",
+        "Multi-test project matching",
+        "ISO and ASTM standards cross-reference",
+        "Lab detail with schedule PDF links",
+        "MCP server for AI agents"
+      ],
+      "isPartOf": {
+        "@type": "WebSite",
+        "name": "Fraglet ecosystem",
+        "url": "https://fraglet.org"
+      }
+    }
+    </script>
 </head>
 <body class="bg-navy-950 text-slate-200 min-h-screen font-body antialiased">
 

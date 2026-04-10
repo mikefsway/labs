@@ -4,6 +4,7 @@ import time
 from collections import defaultdict
 
 from fastapi import FastAPI, Request, Response
+from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from slowapi import _rate_limit_exceeded_handler
@@ -40,8 +41,17 @@ async def basic_auth_middleware(request: Request, call_next):
     settings = get_settings()
     if not settings.site_password:
         return await call_next(request)
-    # Allow health check without auth
-    if request.url.path == "/health":
+    # Allow health check and agent discovery files without auth — these are
+    # intentionally public so AI agents can fetch them to learn what this
+    # site is and how to use its MCP server.
+    if request.url.path in (
+        "/health",
+        "/llms.txt",
+        "/skill.md",
+        "/robots.txt",
+        "/sitemap.xml",
+        "/.well-known/mcp.json",
+    ):
         return await call_next(request)
 
     client_ip = request.client.host if request.client else "unknown"
@@ -96,3 +106,81 @@ async def lab_detail(request: Request, lab_id: int):
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/llms.txt", include_in_schema=False)
+async def llms_txt(request: Request):
+    content = templates.get_template("llms.txt").render(request=request)
+    return PlainTextResponse(
+        content,
+        media_type="text/plain; charset=utf-8",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+@app.get("/skill.md", include_in_schema=False)
+async def skill_md(request: Request):
+    content = templates.get_template("skill.md").render(request=request)
+    return PlainTextResponse(
+        content,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+@app.get("/robots.txt", include_in_schema=False)
+async def robots_txt():
+    body = (
+        "User-agent: *\n"
+        "Allow: /llms.txt\n"
+        "Allow: /skill.md\n"
+        "Allow: /robots.txt\n"
+        "Allow: /sitemap.xml\n"
+        "Allow: /.well-known/mcp.json\n"
+        "Disallow: /\n"
+        "\n"
+        "# Site is currently Basic Auth protected during testing phase.\n"
+        "# Agent discovery files above are intentionally exempt from auth.\n"
+        "\n"
+        "User-agent: GPTBot\nAllow: /llms.txt\nAllow: /skill.md\nDisallow: /\n\n"
+        "User-agent: ClaudeBot\nAllow: /llms.txt\nAllow: /skill.md\nDisallow: /\n\n"
+        "User-agent: PerplexityBot\nAllow: /llms.txt\nAllow: /skill.md\nDisallow: /\n\n"
+        "User-agent: CCBot\nAllow: /llms.txt\nAllow: /skill.md\nDisallow: /\n\n"
+        "User-agent: Google-Extended\nAllow: /llms.txt\nAllow: /skill.md\nDisallow: /\n\n"
+        "Sitemap: https://labcurate.com/sitemap.xml\n"
+    )
+    return PlainTextResponse(body, media_type="text/plain; charset=utf-8")
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+async def sitemap_xml():
+    body = """<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://labcurate.com/llms.txt</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>https://labcurate.com/skill.md</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>https://labcurate.com/.well-known/mcp.json</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+</urlset>
+"""
+    return Response(body, media_type="application/xml; charset=utf-8")
+
+
+@app.get("/.well-known/mcp.json", include_in_schema=False)
+async def well_known_mcp():
+    return JSONResponse({
+        "mcp_url": "https://labcurate.com/mcp/",
+        "transport": "streamable-http",
+        "auth": {
+            "type": "bearer",
+            "token_source": "contact site operator",
+            "scope": "shared",
+        },
+        "skill_url": "https://labcurate.com/skill.md",
+        "llms_txt_url": "https://labcurate.com/llms.txt",
+        "tools_count": 4,
+        "ecosystem": {
+            "spec": "https://fraglet.org/llms.txt",
+            "registry": "https://fraglet.org/services.json",
+        },
+        "description": "UK testing laboratory capability advisor. 1,524 UKAS-accredited labs, ~14,300 capabilities, ~45,000 ISO/ASTM standards. Single-test search, multi-test project matching, and standards cross-referencing.",
+        "status": "testing-phase — web UI is Basic Auth protected; MCP is separately gated by Bearer API key.",
+    })
