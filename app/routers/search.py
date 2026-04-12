@@ -65,6 +65,29 @@ async def clarify(
     return {"needs_clarification": False}
 
 
+def _classify_breadth(results: list[dict]) -> tuple[int, str | None, list[dict], bool]:
+    """Classify query breadth from score distribution.
+
+    Returns (total_strong, breadth_label, llm_subset, include_detail).
+    """
+    if not results:
+        return 0, None, [], False
+
+    top_score = results[0].get("rrf_score", 0)
+    if top_score <= 0:
+        return 0, None, results, False
+
+    threshold = top_score * 0.5
+    strong = [r for r in results if r.get("rrf_score", 0) >= threshold]
+    total_strong = len(strong)
+
+    if total_strong <= 12:
+        return total_strong, "niche", strong, True
+    if total_strong <= 25:
+        return total_strong, "medium", strong[:15], False
+    return total_strong, "broad", strong[:10], False
+
+
 @router.get("/search/labs")
 @limiter.limit("10/minute")
 async def search_labs(
@@ -75,7 +98,8 @@ async def search_labs(
     location: str | None = Query(None, max_length=100, description="Postcode or town for proximity"),
     recommend: bool = Query(False, description="Include LLM recommendation"),
 ):
-    tasks = [search_lab_fraglets(q, limit=limit, region=region)]
+    fetch_limit = max(limit, 40) if recommend else limit
+    tasks = [search_lab_fraglets(q, limit=fetch_limit, region=region)]
     if recommend:
         tasks.append(search_standards(q, limit=3))
     if location:
@@ -83,19 +107,27 @@ async def search_labs(
 
     gathered = await asyncio.gather(*tasks)
 
-    results = gathered[0]
+    all_results = gathered[0]
     standards = gathered[1] if recommend else None
     user_loc = gathered[-1] if location else None
 
-    if user_loc and results:
-        results = _add_distances(results, user_loc["lat"], user_loc["lng"])
+    if user_loc and all_results:
+        all_results = _add_distances(all_results, user_loc["lat"], user_loc["lng"])
+
+    total_strong, breadth, llm_results, include_detail = _classify_breadth(all_results)
+    results = all_results[:limit]
 
     resp = {"query": q, "count": len(results), "results": results}
+    if total_strong > len(results):
+        resp["total_strong"] = total_strong
+    if breadth:
+        resp["breadth"] = breadth
     if user_loc:
         resp["location"] = user_loc
-    if recommend and results:
+    if recommend and llm_results:
         rec = await generate_recommendation(
-            q, results, standards=standards, mode="labs"
+            q, llm_results, standards=standards, mode="labs",
+            include_detail=include_detail,
         )
         if rec:
             # Fetch details for any extra labs found via standard cross-reference

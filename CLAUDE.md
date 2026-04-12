@@ -5,13 +5,13 @@ labcurate.com — B2B testing laboratory advisor. Curates UKAS-accredited lab ca
 ## Architecture
 
 - **Data sources**:
-  - UKAS WordPress REST API + schedule PDFs (1,524 labs, 14,298 capabilities)
+  - UKAS WordPress REST API + schedule PDFs (1,524 labs, 15,028 capabilities)
   - ISO Open Data (44,807 standards with scopes)
   - ASTM store scrape (505 standards with titles/scopes)
 - **Database**: Supabase with pgvector (project `ltbkkikpqijldicdjhpx`)
   - `labs` — 1,524 rows: name, accreditation #, address, contact, lat/lng, schedule_pdfs JSONB
-  - `capabilities` — 14,298 rows: materials_products, test_type, standards, embedding vector(512), search_tsv
-  - `lab_fraglets` — 1,210 rows: AI-generated descriptions, additional JSONB, embedding vector(512)
+  - `capabilities` — 15,028 rows: materials_products, test_type, standards, embedding vector(512), search_tsv
+  - `lab_fraglets` — 1,524 rows (100% coverage): AI-generated descriptions, additional JSONB, embedding vector(512)
   - `lab_sites` — 88 rows: multi-site labs with addresses, lat/lng, capabilities_summary, site_code
   - `standards` — 77,261 rows (45,312 with embeddings): ISO + ASTM, reference, title, scope
   - IVFFlat/GIN indexes on embedding and search_tsv columns
@@ -54,8 +54,12 @@ scraper/
   scrape_astm.py           # Scrape ASTM titles from store.astm.org (resumable)
   scrape_astm_guess.py     # Year-guess variant for ASTM refs without year suffix
   load_astm_standards.py   # Load scraped ASTM into Supabase + embed
+  prepare_fraglet_batches.py # Matrix filter + diversity sampling for fraglet generation
+  load_fraglets.py         # Load generated fraglets from JSON into Supabase (resumable)
+  backfill_zero_cap_labs.py # Backfill capabilities for labs with PDFs but zero DB rows
   search.py                # Legacy CLI search (superseded)
 data/                      # Scraped data (gitignored), schedule_pdfs.json, astm_standards.json
+  generated_fraglets/      # Fraglet JSON files ready for load_fraglets.py
 render.yaml                # Render deployment config
 ```
 
@@ -89,11 +93,12 @@ All search RPCs check `lab_sites.address` in addition to `labs.address` for regi
 
 ## Lab fraglet generation
 
-- 1,210/1,524 done. 314 remaining (bulk 1-14 caps, heavy 15-99, monster 100+)
-- 5 Sonnet agents × 25 labs per round = 125 labs/round
-- Batching by capability count — see `feedback_fraglet_agent_batching.md`
-- Use $frag$ dollar-quoting for SQL inserts
-- After insert: run `python -m scraper.embed_fraglets` to embed new fraglets
+- **1,524/1,524 done (100% coverage)**
+- Pipeline: `scraper/prepare_fraglet_batches.py` → generate JSON → `scraper/load_fraglets.py` → `scraper/embed_fraglets.py`
+- Monster labs (100+ caps): matrix-collapse filter drops SANTE-style analyte enumeration rows, then diversity-samples to 50 rows max
+- Generated fraglets stored in `data/generated_fraglets/*.json` before loading — decoupled from Supabase for reliability
+- `load_fraglets.py` is resumable (skips existing lab_ids)
+- `backfill_zero_cap_labs.py` handles labs where schedule PDFs were parsed but capabilities never inserted
 
 ### Brief field style rules
 
@@ -114,7 +119,8 @@ All search RPCs check `lab_sites.address` in addition to `labs.address` for regi
 - GPT-5.4-mini requires `max_completion_tokens` (not `max_tokens`) — 400 error otherwise
 - Calibration schedules have different column structure (Range | Expanded Uncertainty instead of Standards)
 - 88 multi-site labs: addresses were misclassified as capabilities, now in `lab_sites` table with site_code
-- schedule_pdfs.json URLs stored in labs.schedule_pdfs JSONB (not predictable URL pattern)
+- schedule_pdfs JSONB column stores proper arrays (previously double-encoded strings, fixed April 2026)
+- Some large labs have analyte-matrix rows in capabilities (e.g. SGS 1081 rows → 3 real capability blocks). Matrix filter in `prepare_fraglet_batches.py` handles this
 - UKAS data is public; BHB v William Hill precedent favours factual data reuse
 
 ## Security
@@ -132,7 +138,11 @@ All search RPCs check `lab_sites.address` in addition to `labs.address` for regi
 ```bash
 source venv/bin/activate
 uvicorn app.main:app --reload --port 8000          # Dev
+python -m scraper.prepare_fraglet_batches            # Generate filtered/sampled batches
+python -m scraper.load_fraglets                      # Load fraglets from data/generated_fraglets/
 python -m scraper.embed_fraglets                     # Embed new fraglets
+python -m scraper.backfill_zero_cap_labs              # Backfill caps for labs with PDFs but no DB rows
+python -m scraper.generate_embeddings                # Embed capabilities (resumable)
 python -m scraper.embed_standards                    # Embed standards (resumable)
 python -m scraper.scrape_astm                        # Scrape ASTM (resumable)
 python -m scraper.load_astm_standards                # Load ASTM into Supabase

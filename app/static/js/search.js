@@ -196,7 +196,11 @@
                 return;
             }
 
-            countValue.textContent = data.count;
+            if (data.total_strong && data.total_strong > data.count) {
+                countValue.textContent = data.count + " of ~" + data.total_strong + " matching";
+            } else {
+                countValue.textContent = data.count;
+            }
             resultCount.classList.remove("hidden");
 
             // Track anonymous search count
@@ -289,6 +293,15 @@
                         : buildResultCard(r, maxRrf, idx);
                     resultsDiv.appendChild(card);
                 });
+            }
+
+            // Breadth nudge for broad queries
+            if (data.breadth === "broad" && data.total_strong > data.count) {
+                const nudge = el("div", "mt-6 p-4 rounded-xl border border-white/[0.06] bg-white/[0.02] text-center");
+                const nudgeText = el("p", "text-sm text-slate-400");
+                nudgeText.textContent = "Many labs are accredited for this type of testing. Try adding a location or specifying a standard to narrow results.";
+                nudge.appendChild(nudgeText);
+                resultsDiv.appendChild(nudge);
             }
 
             // Bottom disclaimer on all advisor results

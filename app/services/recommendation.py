@@ -43,6 +43,7 @@ async def generate_recommendation(
     results: list[dict],
     standards: list[dict] | None = None,
     mode: str = "labs",
+    include_detail: bool = False,
 ) -> dict | None:
     if not results:
         return None
@@ -51,7 +52,7 @@ async def generate_recommendation(
     client = AsyncOpenAI(api_key=settings.openai_api_key)
 
     sanitised_query = _sanitise_query(query)
-    results_text = _format_results(results, mode)
+    results_text = _format_results(results, mode, include_detail)
     standards_text = _format_standards(standards) if standards else ""
 
     user_content = f"Query: {sanitised_query}\n{standards_text}\nMatching labs:\n{results_text}"
@@ -139,19 +140,43 @@ async def _find_labs_with_standards(standard_refs: list[str]) -> list[int]:
     return list(lab_ids)
 
 
-def _format_results(results: list[dict], mode: str) -> str:
+def _format_results(results: list[dict], mode: str, include_detail: bool = False) -> str:
     lines = []
     for r in results:
         if mode == "labs":
             brief = r.get("brief", "")
             tags = ", ".join(r.get("tags", [])[:6]) if r.get("tags") else ""
-            lines.append(f"- lab_id={r.get('lab_id')} {r.get('title', r.get('lab_name', ''))}: {brief} [{tags}]")
+            line = f"- lab_id={r.get('lab_id')} {r.get('title', r.get('lab_name', ''))}: {brief} [{tags}]"
+            if include_detail:
+                caps = _format_additional(r.get("additional"))
+                if caps:
+                    line += f"\n  Capabilities: {caps}"
+            lines.append(line)
         else:
             lines.append(
                 f"- lab_id={r.get('lab_id')} {r.get('lab_name', '')} | "
                 f"{r.get('materials_products', '')[:60]} | {r.get('test_type', '')[:60]}"
             )
     return "\n".join(lines)
+
+
+def _format_additional(additional: dict | None) -> str:
+    """Extract concise capability summaries from the additional field."""
+    if not additional:
+        return ""
+    caps = additional.get("capabilities", [])
+    if not caps:
+        return ""
+    parts = []
+    for cap in caps:
+        summary = cap.get("summary", "")
+        stds = cap.get("standards", "")
+        if summary:
+            entry = summary[:120]
+            if stds:
+                entry += f" ({stds[:80]})"
+            parts.append(entry)
+    return "; ".join(parts)[:500]
 
 
 def _format_standards(standards: list[dict]) -> str:
