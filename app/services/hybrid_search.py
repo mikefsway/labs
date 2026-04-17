@@ -40,7 +40,7 @@ async def search_standards(
     query: str, limit: int = 5
 ) -> list[dict]:
     embedding = await generate_embedding(query)
-    client = get_supabase_anon_client()
+    client = get_supabase_anon_client(schema="standards")
     result = client.rpc(
         "search_standards",
         {
