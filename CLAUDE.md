@@ -128,10 +128,10 @@ All search RPCs check `lab_sites.address` in addition to `labs.address` for regi
 - **Prompt injection**: System/user message separation in LLM prompts. User input sanitised and truncated (500 char max). LLM output `lab_ids` validated against actual search results.
 - **Input validation**: `max_length` constraints on all query parameters.
 - **Supabase access**: Public endpoints use anon client (not service key). RLS enabled on all tables with SELECT-only anon policy.
-- **Rate limiting**: slowapi (10-30 req/min per IP on search endpoints). Brute-force protection on Basic Auth (10 failures / 5 min).
+- **Rate limiting**: slowapi (10-30 req/min per IP on search endpoints).
 - **MCP auth**: Fails closed (503) when API keys not configured. Timing-safe comparison (`secrets.compare_digest`) for MCP API keys.
-- **Bot protection**: Honeypot field + Cloudflare Turnstile on magic link sign-in. Turnstile degrades gracefully when unconfigured. Client-side 30s cooldown between magic link requests.
-- **Turnstile env vars**: `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`. Warning logged when missing.
+- **Web UI auth**: Clerk (production instance, `clerk.labcurate.com`). Separate tenant from KarbonKit. FastAPI middleware in `app/main.py` verifies the `__session` cookie as an RS256 JWT via JWKS (`app/auth.py`), cached 1h. Unauthenticated HTML requests redirect to `/login`; unauthenticated `/api/*` requests return 401. Discovery files (`/health`, `/llms.txt`, `/skill.md`, `/robots.txt`, `/sitemap.xml`, `/.well-known/mcp.json`) are exempt. MCP at `/mcp/*` is mounted separately in `asgi.py` and bypasses this middleware entirely.
+- **Clerk env vars**: `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_JWT_ISSUER_URL=https://clerk.labcurate.com`. Requires `PyJWT[crypto]`.
 
 ## Commands
 
@@ -163,7 +163,7 @@ LabCurate has an MCP server and is listed in the fraglet ecosystem registry. Two
 | Basic auth password / access model changes                  | `app/templates/skill.md` (setup section)                 |
 | MCP URL, auth flow, or account requirement                  | `app/templates/skill.md`, `fraglets/site/services.json`  |
 
-`skill.md` and `llms.txt` templates are at `app/templates/`. Routes are wired in `app/main.py` (`/skill.md`, `/llms.txt`, `/robots.txt`, `/sitemap.xml`, `/.well-known/mcp.json`). All six discovery paths are allowlisted in `basic_auth_middleware` so unauthenticated agents can reach them during the testing-phase password gate.
+`skill.md` and `llms.txt` templates are at `app/templates/`. Routes are wired in `app/main.py` (`/skill.md`, `/llms.txt`, `/robots.txt`, `/sitemap.xml`, `/.well-known/mcp.json`). All six discovery paths are allowlisted in `clerk_auth_middleware` so unauthenticated agents can reach them during the testing-phase sign-in gate.
 
 To check for drift manually: `python scripts/check_agent_artifacts.py`. Exits non-zero if any source file is newer than its artifact's `last-verified:` date.
 

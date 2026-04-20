@@ -38,7 +38,7 @@ After connecting, call `search_lab_capabilities(query="tensile testing")` as a s
 
 ### Note on the web UI
 
-The public labcurate.com website is currently Basic Auth protected during the testing phase — the password is separate from the MCP API key. If the user wants to see the web advisor UI, they'll need both. The MCP is the agent-facing path and does not require the Basic Auth password.
+The public labcurate.com website is gated by a Clerk-backed sign-in during the testing phase — the user creates an account (email magic link or OAuth) at `/login` before they can reach the advisor UI. This is separate from the MCP API key. If the user wants to see the web advisor UI they'll need an account; the MCP is the agent-facing path and does not require a sign-in.
 
 ---
 
@@ -156,5 +156,5 @@ This is the highest-level entry point when the user needs help shaping the reque
 
 ---
 
-last-verified: 2026-04-10
+last-verified: 2026-04-20
 source-of-truth: labs_mcp/server.py (MCP tools), app/services/hybrid_search.py (search logic), app/services/recommendation.py (standards advisor)

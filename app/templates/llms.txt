@@ -28,9 +28,9 @@ All search tools accept a `region` filter (UK nation or county) for proximity-se
 
 ## Web REST API
 
-During the current **testing phase**, the REST API and its OpenAPI schema (`/openapi.json`, `/docs`) are gated behind the site-wide Basic Auth password, alongside the web UI. The MCP endpoint is the only agent-accessible path and has its own separate Bearer auth — use it. When labcurate exits the testing phase, this note will be removed and the OpenAPI schema will be linked here.
+During the current **testing phase**, the REST API and its OpenAPI schema (`/openapi.json`, `/docs`) are gated behind a Clerk-backed sign-in alongside the web UI. The MCP endpoint is the only agent-accessible path and has its own separate Bearer auth — use it. When labcurate exits the testing phase, this note will be removed and the OpenAPI schema will be linked here.
 
-Endpoint list (for reference — you won't be able to call these without the site password):
+Endpoint list (for reference — you won't be able to call these without signing in at labcurate.com/login):
 
 - `GET /api/search?q=<query>&limit=<n>&region=<filter>` — capabilities search
 - `GET /api/search/labs?q=<query>&limit=<n>&location=<place>&recommend=true` — advisor search with LLM-generated standards guidance and lab grouping
@@ -38,7 +38,7 @@ Endpoint list (for reference — you won't be able to call these without the sit
 - `GET /api/labs/{lab_id}` — lab detail
 - `GET /health` — health check (public)
 
-For agent use, the MCP tools above cover the same ground and work with a Bearer API key, not the site password.
+For agent use, the MCP tools above cover the same ground and work with a Bearer API key, independent of the Clerk sign-in used by human visitors.
 
 ## Notes on the data
 
@@ -74,5 +74,5 @@ labcurate is part of the fraglet ecosystem — lab descriptions are stored as fr
 
 ---
 
-last-verified: 2026-04-10
+last-verified: 2026-04-20
 source-of-truth: labs_mcp/server.py (MCP tools), app/routers/search.py / labs.py (REST endpoints), app/services/hybrid_search.py (search logic)

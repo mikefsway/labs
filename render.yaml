@@ -9,15 +9,15 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_KEY
         sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
       - key: OPENAI_API_KEY
         sync: false
       - key: LABS_MCP_API_KEYS
         sync: false
-      - key: SUPABASE_ANON_KEY
+      - key: CLERK_PUBLISHABLE_KEY
         sync: false
-      - key: TURNSTILE_SITE_KEY
+      - key: CLERK_SECRET_KEY
         sync: false
-      - key: TURNSTILE_SECRET_KEY
-        sync: false
-      - key: SITE_PASSWORD
+      - key: CLERK_JWT_ISSUER_URL
         sync: false

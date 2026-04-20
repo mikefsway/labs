@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign in — LabCurate</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        navy: { 950: '#020617', 900: '#0c1222', 800: '#131d35', 700: '#1a2847' },
+                        accent: '#0ea5e9'
+                    },
+                    fontFamily: {
+                        display: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+                        mono: ['"DM Mono"', '"Fira Code"', 'monospace'],
+                        body: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    {% if clerk_publishable_key and clerk_frontend_api %}
+    <script
+        async
+        crossorigin="anonymous"
+        data-clerk-publishable-key="{{ clerk_publishable_key }}"
+        src="https://{{ clerk_frontend_api }}/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
+        type="text/javascript"></script>
+    {% endif %}
+</head>
+<body class="bg-navy-950 text-slate-200 min-h-screen font-body antialiased flex items-center justify-center">
+    <div class="w-full max-w-md px-6 py-10">
+        <div class="flex items-center justify-center gap-3 mb-8">
+            <div class="w-8 h-8 rounded border border-accent/40 flex items-center justify-center bg-accent/5">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="text-accent">
+                    <circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1"/>
+                    <line x1="8" y1="2" x2="8" y2="14" stroke="currentColor" stroke-width="0.5" stroke-dasharray="1 1.5"/>
+                    <line x1="2" y1="8" x2="14" y2="8" stroke="currentColor" stroke-width="0.5" stroke-dasharray="1 1.5"/>
+                    <circle cx="8" cy="8" r="1.5" fill="currentColor"/>
+                </svg>
+            </div>
+            <div>
+                <span class="text-lg font-semibold text-white tracking-tight font-display">LabCurate</span>
+                <span class="text-[10px] font-mono text-slate-500 ml-2 tracking-widest uppercase">Testing Advisor</span>
+            </div>
+        </div>
+        <div id="sign-in" class="flex justify-center"></div>
+        <p id="sign-in-fallback" class="hidden text-center text-xs font-mono text-slate-500 mt-6">
+            Sign-in is temporarily unavailable. Please retry shortly.
+        </p>
+    </div>
+    <script>
+    window.addEventListener("load", async () => {
+        if (typeof Clerk === "undefined") {
+            document.getElementById("sign-in-fallback")?.classList.remove("hidden");
+            return;
+        }
+        try { await Clerk.load(); } catch (_) {
+            document.getElementById("sign-in-fallback")?.classList.remove("hidden");
+            return;
+        }
+        if (Clerk.user) {
+            window.location.href = "/";
+            return;
+        }
+        const mount = document.getElementById("sign-in");
+        Clerk.mountSignIn(mount, {
+            afterSignInUrl: "/",
+            afterSignUpUrl: "/",
+            appearance: { variables: { colorPrimary: "#0ea5e9" } },
+        });
+    });
+    </script>
+</body>
+</html>

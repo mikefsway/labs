@@ -27,13 +27,14 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
-    <script>
-        const SUPABASE_URL = "{{ supabase_url }}";
-        const SUPABASE_ANON_KEY = "{{ supabase_anon_key }}";
-        const TURNSTILE_SITE_KEY = "{{ turnstile_site_key }}";
-    </script>
+    {% if clerk_publishable_key and clerk_frontend_api %}
+    <script
+        async
+        crossorigin="anonymous"
+        data-clerk-publishable-key="{{ clerk_publishable_key }}"
+        src="https://{{ clerk_frontend_api }}/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
+        type="text/javascript"></script>
+    {% endif %}
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -85,14 +86,9 @@
                     <span class="text-slate-700">/</span>
                     <span>14,298 capabilities</span>
                 </div>
-                <div id="auth-area">
-                    <button id="sign-in-btn" onclick="showAuthModal()" class="hidden px-3 py-1.5 rounded-lg border border-white/10 bg-white/[0.04] text-xs font-mono text-slate-400 hover:border-accent/50 hover:text-white transition-all cursor-pointer">
-                        Sign in
-                    </button>
-                    <div id="user-menu" class="hidden flex items-center gap-2">
-                        <span id="user-email" class="text-xs font-mono text-slate-500 truncate max-w-[140px]"></span>
-                        <button onclick="signOut()" class="text-xs font-mono text-slate-600 hover:text-slate-400 transition-colors cursor-pointer">sign out</button>
-                    </div>
+                <div id="auth-area" class="flex items-center gap-2">
+                    <span id="user-email" class="hidden text-xs font-mono text-slate-500 truncate max-w-[140px]"></span>
+                    <button id="sign-out-btn" class="hidden text-xs font-mono text-slate-600 hover:text-slate-400 transition-colors cursor-pointer">sign out</button>
                 </div>
             </div>
         </div>
@@ -109,190 +105,25 @@
         </div>
     </footer>
 
-    <!-- Auth modal -->
-    <div id="auth-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center">
-        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="hideAuthModal()"></div>
-        <div class="relative bg-navy-900 border border-white/10 rounded-2xl p-8 w-full max-w-sm mx-4">
-            <button onclick="hideAuthModal()" class="absolute top-4 right-4 text-slate-600 hover:text-slate-400 transition-colors text-lg cursor-pointer">&times;</button>
-            <h2 class="font-display font-semibold text-white text-lg mb-2">Sign in to LabCurate</h2>
-            <p class="text-sm text-slate-400 mb-6">Get full access to lab details and unlimited searches.</p>
-            <div id="auth-form">
-                <input id="auth-email" type="email" placeholder="your@email.com"
-                    class="w-full px-4 py-3 bg-white/[0.04] border border-white/10 rounded-lg text-white text-sm placeholder:text-slate-600 focus:outline-none focus:border-accent/50 transition-colors font-mono mb-3"
-                    autocomplete="email">
-                <!-- Honeypot — hidden from real users -->
-                <div style="position:absolute;left:-9999px" aria-hidden="true">
-                    <input type="text" id="auth-website" name="website" tabindex="-1" autocomplete="off">
-                </div>
-                <div id="turnstile-widget" class="mb-3"></div>
-                <button id="auth-submit" onclick="sendMagicLink()"
-                    class="w-full px-4 py-3 bg-accent/90 hover:bg-accent text-white font-semibold rounded-lg transition-colors font-display text-sm tracking-wide cursor-pointer">
-                    Send magic link
-                </button>
-                <p id="auth-error" class="hidden text-xs text-red-400 mt-2 font-mono"></p>
-            </div>
-            <div id="auth-sent" class="hidden text-center">
-                <p class="text-sm text-slate-300 mb-1">Check your email</p>
-                <p class="text-xs text-slate-500 font-mono">Click the link we sent to sign in.</p>
-            </div>
-        </div>
-    </div>
-
     <script>
-    // --- Auth ---
-    const _sb = SUPABASE_URL && SUPABASE_ANON_KEY
-        ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-        : null;
+    window.addEventListener("load", async () => {
+        if (typeof Clerk === "undefined") return;
+        try { await Clerk.load(); } catch (_) { return; }
 
-    let _user = null;
-    let _turnstileWidgetId = null;
-    const MAGIC_LINK_COOLDOWN_MS = 30000;
+        const emailEl = document.getElementById("user-email");
+        const signOutBtn = document.getElementById("sign-out-btn");
 
-    function showAuthModal() {
-        document.getElementById("auth-modal").classList.remove("hidden");
-        document.getElementById("auth-form").classList.remove("hidden");
-        document.getElementById("auth-sent").classList.add("hidden");
-        document.getElementById("auth-error").classList.add("hidden");
-        const honeypot = document.getElementById("auth-website");
-        if (honeypot) honeypot.value = "";
-        setTimeout(() => document.getElementById("auth-email").focus(), 100);
-        _renderTurnstile();
-    }
-
-    function hideAuthModal() {
-        document.getElementById("auth-modal").classList.add("hidden");
-    }
-
-    function _renderTurnstile() {
-        const container = document.getElementById("turnstile-widget");
-        if (!container || !TURNSTILE_SITE_KEY) return;
-        if (typeof turnstile === "undefined") {
-            // Script not loaded yet — retry shortly
-            setTimeout(_renderTurnstile, 200);
-            return;
-        }
-        container.textContent = "";
-        _turnstileWidgetId = turnstile.render(container, {
-            sitekey: TURNSTILE_SITE_KEY,
-            theme: "dark",
-            callback: function(token) { container.dataset.token = token; },
-        });
-    }
-
-    function _showAuthError(msg) {
-        const errEl = document.getElementById("auth-error");
-        errEl.textContent = msg;
-        errEl.classList.remove("hidden");
-    }
-
-    async function sendMagicLink() {
-        // Honeypot check
-        const honeypot = document.getElementById("auth-website");
-        if (honeypot && honeypot.value) return;
-
-        const email = document.getElementById("auth-email").value.trim();
-        if (!email) return;
-
-        // Client-side rate limiting
-        const lastSent = parseInt(localStorage.getItem("lc_magic_ts") || "0", 10);
-        if (Date.now() - lastSent < MAGIC_LINK_COOLDOWN_MS) {
-            const secsLeft = Math.ceil((MAGIC_LINK_COOLDOWN_MS - (Date.now() - lastSent)) / 1000);
-            _showAuthError("Please wait " + secsLeft + "s before requesting another link.");
-            return;
-        }
-
-        const btn = document.getElementById("auth-submit");
-        const errEl = document.getElementById("auth-error");
-        btn.textContent = "Sending...";
-        btn.disabled = true;
-        errEl.classList.add("hidden");
-
-        // Turnstile verification
-        const turnstileContainer = document.getElementById("turnstile-widget");
-        const turnstileToken = turnstileContainer ? turnstileContainer.dataset.token : null;
-        if (TURNSTILE_SITE_KEY && !turnstileToken) {
-            _showAuthError("Please complete the verification challenge.");
-            btn.textContent = "Send magic link";
-            btn.disabled = false;
-            return;
-        }
-        if (turnstileToken) {
-            try {
-                const verifyResp = await fetch("/api/auth/verify-turnstile", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ token: turnstileToken }),
+        if (Clerk.user) {
+            const email = Clerk.user.primaryEmailAddress?.emailAddress;
+            if (email && emailEl) { emailEl.textContent = email; emailEl.classList.remove("hidden"); }
+            if (signOutBtn) {
+                signOutBtn.classList.remove("hidden");
+                signOutBtn.addEventListener("click", async () => {
+                    await Clerk.signOut();
+                    window.location.href = "/login";
                 });
-                if (!verifyResp.ok) {
-                    _showAuthError("Verification failed. Please try again.");
-                    btn.textContent = "Send magic link";
-                    btn.disabled = false;
-                    _renderTurnstile();
-                    return;
-                }
-            } catch (err) {
-                _showAuthError("Verification error. Please try again.");
-                btn.textContent = "Send magic link";
-                btn.disabled = false;
-                return;
             }
         }
-
-        const { error } = await _sb.auth.signInWithOtp({
-            email,
-            options: { emailRedirectTo: window.location.origin + "/" }
-        });
-
-        if (error) {
-            _showAuthError(error.message);
-            btn.textContent = "Send magic link";
-            btn.disabled = false;
-        } else {
-            localStorage.setItem("lc_magic_ts", String(Date.now()));
-            document.getElementById("auth-form").classList.add("hidden");
-            document.getElementById("auth-sent").classList.remove("hidden");
-        }
-    }
-
-    async function signOut() {
-        if (_sb) await _sb.auth.signOut();
-        _user = null;
-        updateAuthUI();
-        window.location.reload();
-    }
-
-    function updateAuthUI() {
-        const signInBtn = document.getElementById("sign-in-btn");
-        const userMenu = document.getElementById("user-menu");
-        const userEmail = document.getElementById("user-email");
-        if (_user) {
-            signInBtn.classList.add("hidden");
-            userMenu.classList.remove("hidden");
-            userEmail.textContent = _user.email;
-        } else {
-            signInBtn.classList.remove("hidden");
-            userMenu.classList.add("hidden");
-        }
-    }
-
-    // Check session on load
-    (async function initAuth() {
-        if (!_sb) return;
-        const { data: { session } } = await _sb.auth.getSession();
-        _user = session?.user || null;
-        updateAuthUI();
-
-        // Listen for auth changes (magic link callback)
-        _sb.auth.onAuthStateChange((event, session) => {
-            _user = session?.user || null;
-            updateAuthUI();
-            if (event === "SIGNED_IN") hideAuthModal();
-        });
-    })();
-
-    // Enter key in email input
-    document.getElementById("auth-email")?.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") sendMagicLink();
     });
     </script>
 
